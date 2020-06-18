@@ -3037,6 +3037,150 @@ _NODISCARD _CONSTEXPR20 _Iter_diff_t<_InIt> _Count_vbool(_InIt _First, const _In
 
     return _Count;
 }
+
+template <class _InIt, class _OutIt>
+_CONSTEXPR20 _OutIt _Copy_vbool(_InIt _First, _InIt _Last, _OutIt _Dest) {
+    // copy [_First, _Last) to [_Dest, ...)
+
+    const auto _DestEnd = _Dest + (_Last - _First);
+    _Vbase* _UFirst     = const_cast<_Vbase*>(_First._Myptr);
+    _Vbase* _UDest      = const_cast<_Vbase*>(_Dest._Myptr);
+    _Vbase* _ULast      = const_cast<_Vbase*>(_Last._Myptr);
+
+    const auto _FirstSourceMask = static_cast<_Vbase>(-1) << _First._Myoff;
+    const auto _FirstDestMask   = static_cast<_Vbase>(-1) >> (_VBITS - _Dest._Myoff);
+    const auto _LastSourceMask  = static_cast<_Vbase>(-1) >> (_VBITS - _Last._Myoff);
+    const auto _LastDestMask    = static_cast<_Vbase>(-1) << _DestEnd._Myoff;
+
+    const bool _IsSingleBlockSource = _UFirst == _ULast;
+    const bool _IsSingleBlockDest   = _Dest._Myptr == _DestEnd._Myptr;
+    if (_IsSingleBlockSource && _IsSingleBlockDest) {
+        const bool _IsRightShift = _Dest._Myoff < _First._Myoff;
+        const auto _SourceMask   = _FirstSourceMask & _LastSourceMask;
+        const auto _DestMask     = _FirstDestMask | _LastDestMask;
+        const auto _SourceShift  = _IsRightShift ? _First._Myoff - _Dest._Myoff : _Dest._Myoff - _First._Myoff;
+        const auto _SourceVal    = _IsRightShift ? (*_UFirst & _SourceMask) >> _SourceShift //
+                                                 : (*_UFirst & _SourceMask) << _SourceShift;
+        *_UDest                  = (*_UDest & _DestMask) | _SourceVal;
+        return _DestEnd;
+    } else if (_IsSingleBlockSource) {
+        const auto _FirstShift     = _Dest._Myoff - _First._Myoff;
+        const auto _SourceMask     = _FirstSourceMask & _LastSourceMask;
+        const auto _FirstSourceVal = (*_UFirst & _SourceMask) << _FirstShift;
+        *_UDest                    = (*_UDest & _FirstDestMask) | _FirstSourceVal;
+        ++_UDest;
+
+        const auto _LastShift     = _Last._Myoff - _DestEnd._Myoff;
+        const auto _LastSourceVal = (*_UFirst & _SourceMask) >> _LastShift;
+        *_UDest                   = (*_UDest & _LastDestMask) | _LastSourceVal;
+        return _DestEnd;
+    } else if (_IsSingleBlockDest) {
+        const auto _FirstShift     = _First._Myoff - _Dest._Myoff;
+        const auto _LastShift      = _DestEnd._Myoff - _Last._Myoff;
+        const auto _FirstSourceVal = (*_UFirst & _FirstSourceMask) >> _FirstShift;
+        const auto _LastSourceVal  = (*_ULast & _LastSourceMask) << _LastShift;
+        const auto _DestMask       = _FirstDestMask | _LastDestMask;
+        *_UDest                    = (*_UDest & _DestMask) | _FirstSourceVal | _LastSourceVal;
+        return _DestEnd;
+    }
+
+    // _First and _Dest have matching char alignment, so use memmove
+    const auto _UnalignedFirstBits = _First._Myoff & _Vbase(7);
+    const auto _UnalignedDestBits  = _Dest._Myoff & _Vbase(7);
+    if (_UnalignedFirstBits == _UnalignedDestBits) {
+        const auto _UnalignedLastBits = _Last._Myoff & _Vbase(7);
+
+        // What is the Strict Aliasing Rule and Why do we care?
+        char* _UFirst_ch = reinterpret_cast<char*>(_UFirst) + (_First._Myoff - _UnalignedFirstBits) / 8;
+        char* _UDest_ch  = reinterpret_cast<char*>(_UDest) + (_Dest._Myoff - _UnalignedFirstBits) / 8;
+        char* _ULast_ch  = reinterpret_cast<char*>(_ULast) + (_Last._Myoff - _UnalignedLastBits) / 8;
+
+        // Copy bits until the next char alignment
+        if (_UnalignedFirstBits != 0) {
+            const auto _SourceBitMask = static_cast<char>(UCHAR_MAX << _UnalignedFirstBits);
+            const auto _DestBitMask   = static_cast<char>(UCHAR_MAX >> (8 - _UnalignedFirstBits));
+            *_UDest_ch                = (*_UDest_ch & _DestBitMask) | (*_UFirst_ch & _SourceBitMask);
+            ++_UFirst_ch;
+            ++_UDest_ch;
+        }
+
+#ifdef __cpp_lib_is_constant_evaluated
+        if (_STD is_constant_evaluated()) {
+            for (; _UFirst_ch != _ULast_ch; ++_UDest_ch, (void) ++_UFirst_ch) {
+                *_UDest_ch = *_UFirst_ch;
+            }
+        } else
+#endif // __cpp_lib_is_constant_evaluated
+        {
+            _UDest_ch = _Copy_memmove(_UFirst_ch, _ULast_ch, _UDest_ch);
+        }
+
+        // Copy remaining last bits
+        if (_UnalignedLastBits != 0) {
+            const auto _SourceBitMask = static_cast<char>(UCHAR_MAX >> (8 - _UnalignedLastBits));
+            const auto _DestBitMask   = static_cast<char>(UCHAR_MAX << _UnalignedLastBits);
+            *_UDest_ch                = (*_UDest_ch & _DestBitMask) | (*_ULast_ch & _SourceBitMask);
+        }
+        return _DestEnd;
+    }
+
+    // Unaligned _UFirst and _ULast require a two step copy with carry
+    const bool _IsRightShift = _Dest._Myoff < _First._Myoff;
+    if (_IsRightShift) {
+        const auto _SourceShift = _First._Myoff - _Dest._Myoff;
+        const auto _CarryShift  = _VBITS - _SourceShift;
+        const auto _CarryMask   = static_cast<_Vbase>(-1) >> _SourceShift;
+
+        const auto _FirstSourceVal = (*_UFirst & _FirstSourceMask) >> _SourceShift;
+        *_UDest                    = (*_UDest & _FirstDestMask) | _FirstSourceVal;
+
+        ++_UFirst;
+        for (; _UFirst != _ULast; ++_UFirst) {
+            const auto _CarryVal = *_UFirst << _CarryShift;
+            *_UDest              = (*_UDest & _CarryMask) | _CarryVal;
+
+            ++_UDest;
+            const auto _SourceVal = *_UFirst >> _SourceShift;
+            *_UDest               = _SourceVal;
+        }
+
+        if (_Last._Myoff != 0) {
+            const auto _LastDestCarryMask = _CarryMask | (_Vbase(-1) << (_VBITS - _Last._Myoff));
+            const auto _CarryVal          = (*_UFirst & _LastSourceMask) << _CarryShift;
+            *_UDest                       = (*_UDest & _LastDestCarryMask) | _CarryVal;
+        }
+
+        if (_Last._Myoff > _SourceShift) {
+            const auto _SourceVal = (*_UFirst & _LastSourceMask) >> _SourceShift;
+            ++_UDest;
+            *_UDest = (*_UDest & _LastDestMask) | _SourceVal;
+        }
+    } else {
+        const auto _SourceShift = _Dest._Myoff - _First._Myoff;
+        const auto _CarryShift  = _VBITS - _SourceShift;
+
+        const auto _FirstSourceVal = (*_UFirst & _FirstSourceMask) << _SourceShift;
+        *_UDest                    = (*_UDest & _FirstDestMask) | _FirstSourceVal;
+
+        auto _CarryVal = *_UFirst >> _CarryShift;
+        ++_UFirst;
+        ++_UDest;
+        for (; _UFirst != _ULast; ++_UFirst, (void) ++_UDest) {
+            const auto _SourceVal = *_UFirst << _SourceShift;
+            *_UDest               = _CarryVal | _SourceVal;
+
+            _CarryVal = *_UFirst >> _CarryShift;
+        }
+
+        if (_Last._Myoff == 0) {
+            *_UDest = (*_UDest & _LastDestMask) | _CarryVal;
+        } else {
+            const auto _LastSourceVal = (*_UFirst & _LastSourceMask) << _SourceShift;
+            *_UDest                   = (*_UDest & _LastDestMask) | _CarryVal | _LastSourceVal;
+        }
+    }
+    return _DestEnd;
+}
 #endif // _HAS_IF_CONSTEXPR
 _STD_END
 
