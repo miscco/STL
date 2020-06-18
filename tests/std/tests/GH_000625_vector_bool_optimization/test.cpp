@@ -96,6 +96,61 @@ bool test_fill() {
     return true;
 }
 
+void test_find_helper(const size_t length) {
+    // No offset
+    {
+        vector<bool> input_true(length, false);
+        input_true.resize(length + 3, true);
+        input_true[length - 2].flip();
+        const auto result_true = find(input_true.begin(), prev(input_true.end(), 3), true);
+        assert(result_true == next(input_true.begin(), static_cast<ptrdiff_t>(length - 2)));
+
+        vector<bool> input_false(length, true);
+        input_false.resize(length + 3, false);
+        input_false[length - 1].flip();
+        const auto result_false = find(input_false.begin(), prev(input_false.end(), 3), false);
+        assert(result_false == next(input_false.begin(), static_cast<ptrdiff_t>(length - 1)));
+    }
+
+    // With offset
+    {
+        vector<bool> input_true(length, false);
+        input_true.resize(length + 3, true);
+        input_true[length - 2].flip();
+        input_true[0].flip();
+        const auto result_true   = find(next(input_true.begin()), prev(input_true.end(), 3), true);
+        const auto position_true = static_cast<ptrdiff_t>(length == 0 ? 1 : (length - 2));
+        assert(result_true == next(input_true.begin(), position_true));
+
+        vector<bool> input_false(length, true);
+        input_false.resize(length + 3, false);
+        input_false[length - 1].flip();
+        input_false[0].flip();
+        const auto position_false = static_cast<ptrdiff_t>(length == 0 ? 1 : (length - 2));
+        const auto result_false   = find(next(input_false.begin()), prev(input_false.end(), 3), false);
+        assert(result_false == next(input_false.begin(), static_cast<ptrdiff_t>(length - 1)));
+    }
+}
+
+bool test_find() {
+    // Empty range
+    test_find_helper(0);
+
+    // One block, ends within block
+    test_find_helper(15);
+
+    // One block, ends at block boundary
+    test_find_helper(blockSize);
+
+    // Multiple blocks, within block
+    test_find_helper(3 * blockSize + 5);
+
+    // Multiple blocks, ends at block boundary
+    test_find_helper(4 * blockSize);
+    return true;
+}
+
 int main() {
     test_fill();
+    test_find();
 }
