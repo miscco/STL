@@ -3822,29 +3822,38 @@ public:
         return _STD move(_Current);
     }
 #else // ^^^ __cpp_lib_concepts / !__cpp_lib_concepts vvv
-    _NODISCARD _CONSTEXPR17 iterator_type base() const {
+    _NODISCARD _CONSTEXPR17 iterator_type base() const
+        noexcept(is_nothrow_copy_constructible_v<_Iter>) /* strengthened */ {
         return _Current;
     }
 #endif // __cpp_lib_concepts
 
-    _NODISCARD _CONSTEXPR17 reference operator*() const {
+    _NODISCARD _CONSTEXPR17 reference operator*() const
 #ifdef __cpp_lib_concepts
+#ifdef __EDG__ // TRANSITION, VSO-1132105
+        noexcept(noexcept(_RANGES iter_move(_STD declval<const _Iter&>()))) /* strengthened */ {
+#else // ^^^ workaround / no workaround vvv
+        noexcept(noexcept(_RANGES iter_move(_Current))) /* strengthened */ {
+#endif // TRANSITION, VSO-1132105
         return _RANGES iter_move(_Current);
 #else // ^^^ __cpp_lib_concepts / !__cpp_lib_concepts vvv
+        noexcept(noexcept(static_cast<reference>(*_Current))) /* strengthened */ {
         return static_cast<reference>(*_Current);
 #endif // __cpp_lib_concepts
     }
 
-    _CXX20_DEPRECATE_MOVE_ITERATOR_ARROW _NODISCARD _CONSTEXPR17 pointer operator->() const {
+    _NODISCARD _CXX20_DEPRECATE_MOVE_ITERATOR_ARROW _CONSTEXPR17 pointer operator->() const
+        noexcept(is_nothrow_copy_constructible_v<_Iter>) /* strengthened */ {
         return _Current;
     }
 
-    _CONSTEXPR17 move_iterator& operator++() {
+    _CONSTEXPR17 move_iterator& operator++() noexcept(noexcept(++_Current)) /* strengthened */ {
         ++_Current;
         return *this;
     }
 
-    _CONSTEXPR17 auto operator++(int) {
+    _CONSTEXPR17 auto operator++(int) noexcept(
+        noexcept(++_Current) && is_nothrow_copy_constructible_v<_Iter>) /* strengthened */ {
 #ifdef __cpp_lib_concepts
         if constexpr (forward_iterator<_Iter>) {
 #endif // __cpp_lib_concepts
@@ -3858,12 +3867,13 @@ public:
 #endif // __cpp_lib_concepts
     }
 
-    _CONSTEXPR17 move_iterator& operator--() {
+    _CONSTEXPR17 move_iterator& operator--() noexcept(noexcept(--_Current)) /* strengthened */ {
         --_Current;
         return *this;
     }
 
-    _CONSTEXPR17 move_iterator operator--(int) {
+    _CONSTEXPR17 move_iterator operator--(int) noexcept(
+        noexcept(--_Current) && is_nothrow_copy_constructible_v<_Iter>) /* strengthened */ {
         move_iterator _Tmp = *this;
         --_Current;
         return _Tmp;
@@ -3881,47 +3891,59 @@ public:
         return _Current != _Sentinel;
     }
 
-    _NODISCARD _CONSTEXPR17 move_iterator operator+(const difference_type _Off) const {
+    _NODISCARD _CONSTEXPR17 move_iterator operator+(const difference_type _Off) const
+        noexcept(is_nothrow_copy_constructible_v<_Iter>&& noexcept(_Current + _Off)) /* strengthened */ {
         return move_iterator(_Current + _Off);
     }
 
-    _CONSTEXPR17 move_iterator& operator+=(const difference_type _Off) {
+    _CONSTEXPR17 move_iterator& operator+=(const difference_type _Off) noexcept(
+        noexcept(_Current += _Off)) /* strengthened */ {
         _Current += _Off;
         return *this;
     }
 
-    _NODISCARD _CONSTEXPR17 move_iterator operator-(const difference_type _Off) const {
+    _NODISCARD _CONSTEXPR17 move_iterator operator-(const difference_type _Off) const
+        noexcept(is_nothrow_copy_constructible_v<_Iter>&& noexcept(_Current - _Off)) /* strengthened */ {
         return move_iterator(_Current - _Off);
     }
 
-    _CONSTEXPR17 move_iterator& operator-=(const difference_type _Off) {
+    _CONSTEXPR17 move_iterator& operator-=(const difference_type _Off) noexcept(
+        noexcept(_Current -= _Off)) /* strengthened */ {
         _Current -= _Off;
         return *this;
     }
 
-    _NODISCARD _CONSTEXPR17 reference operator[](const difference_type _Off) const {
+    _NODISCARD _CONSTEXPR17 reference operator[](const difference_type _Off) const
 #ifdef __cpp_lib_concepts
+#ifdef __EDG__ // TRANSITION, VSO-1132105
+        noexcept(noexcept(_RANGES iter_move(_STD declval<const _Iter&>() + difference_type{}))) /* strengthened */ {
+#else // ^^^ workaround / no workaround vvv
+        noexcept(noexcept(_RANGES iter_move(_Current + _Off))) /* strengthened */ {
+#endif // TRANSITION, VSO-1132105
         return _RANGES iter_move(_Current + _Off);
 #else // ^^^ __cpp_lib_concepts / !__cpp_lib_concepts vvv
+        noexcept(noexcept(_STD move(_Current[_Off]))) /* strengthened */ {
         return _STD move(_Current[_Off]);
 #endif // __cpp_lib_concepts
     }
 
 #ifdef __cpp_lib_concepts
     template <sentinel_for<_Iter> _Sent>
-    _NODISCARD friend constexpr bool operator==(const move_iterator& _Left, const move_sentinel<_Sent>& _Right) {
+    _NODISCARD friend constexpr bool
+        operator==(const move_iterator& _Left, const move_sentinel<_Sent>& _Right) noexcept(
+            noexcept(_Left._Current == _Right._Get_last())) /* strengthened */ {
         return _Left._Current == _Right._Get_last();
     }
 
     template <sized_sentinel_for<_Iter> _Sent>
-    _NODISCARD friend constexpr difference_type operator-(
-        const move_sentinel<_Sent>& _Left, const move_iterator& _Right) {
+    _NODISCARD friend constexpr difference_type operator-(const move_sentinel<_Sent>& _Left,
+        const move_iterator& _Right) noexcept(noexcept(_Left._Get_last() - _Right._Current)) /* strengthened */ {
         return _Left._Get_last() - _Right._Current;
     }
 
     template <sized_sentinel_for<_Iter> _Sent>
-    _NODISCARD friend constexpr difference_type operator-(
-        const move_iterator& _Left, const move_sentinel<_Sent>& _Right) {
+    _NODISCARD friend constexpr difference_type operator-(const move_iterator& _Left,
+        const move_sentinel<_Sent>& _Right) noexcept(noexcept(_Left._Current - _Right._Get_last())) /* strengthened */ {
         return _Left._Current - _Right._Get_last();
     }
 
@@ -3948,12 +3970,14 @@ public:
 #endif // __cpp_lib_concepts
 
     template <class _Iter2, enable_if_t<_Range_verifiable_v<_Iter, _Iter2>, int> = 0>
-    friend constexpr void _Verify_range(const move_iterator& _First, const move_iterator<_Iter2>& _Last) {
+    friend constexpr void _Verify_range(const move_iterator& _First, const move_iterator<_Iter2>& _Last) noexcept(
+        noexcept(_Verify_range(_First._Current, _Last.base()))) {
         _Verify_range(_First._Current, _Last.base());
     }
 #ifdef __cpp_lib_concepts
     template <sentinel_for<_Iter> _Sent, enable_if_t<_Range_verifiable_v<_Iter, _Sent>, int> = 0>
-    friend constexpr void _Verify_range(const move_iterator& _First, const move_sentinel<_Sent>& _Last) {
+    friend constexpr void _Verify_range(const move_iterator& _First, const move_sentinel<_Sent>& _Last) noexcept(
+        noexcept(_Verify_range(_First._Current, _Last._Get_last()))) {
         _Verify_range(_First._Current, _Last._Get_last());
     }
 #endif // __cpp_lib_concepts
@@ -3961,27 +3985,29 @@ public:
     using _Prevent_inheriting_unwrap = move_iterator;
 
     template <class _Iter2 = iterator_type, enable_if_t<_Offset_verifiable_v<_Iter2>, int> = 0>
-    constexpr void _Verify_offset(const difference_type _Off) const {
+    constexpr void _Verify_offset(const difference_type _Off) const noexcept(noexcept(_Current._Verify_offset(_Off))) {
         _Current._Verify_offset(_Off);
     }
 
     template <class _Iter2 = iterator_type, enable_if_t<_Unwrappable_v<const _Iter2&>, int> = 0>
-    _NODISCARD constexpr move_iterator<_Unwrapped_t<const _Iter2&>> _Unwrapped() const& {
+    _NODISCARD constexpr move_iterator<_Unwrapped_t<const _Iter2&>> _Unwrapped() const& noexcept(
+        noexcept(static_cast<move_iterator<_Unwrapped_t<const _Iter2&>>>(_Current._Unwrapped()))) {
         return static_cast<move_iterator<_Unwrapped_t<const _Iter2&>>>(_Current._Unwrapped());
     }
     template <class _Iter2 = iterator_type, enable_if_t<_Unwrappable_v<_Iter2>, int> = 0>
-    _NODISCARD constexpr move_iterator<_Unwrapped_t<_Iter2>> _Unwrapped() && {
+    _NODISCARD constexpr move_iterator<_Unwrapped_t<_Iter2>> _Unwrapped() && noexcept(
+        noexcept(static_cast<move_iterator<_Unwrapped_t<_Iter2>>>(_STD move(_Current)._Unwrapped()))) {
         return static_cast<move_iterator<_Unwrapped_t<_Iter2>>>(_STD move(_Current)._Unwrapped());
     }
 
     static constexpr bool _Unwrap_when_unverified = _Do_unwrap_when_unverified_v<iterator_type>;
 
     template <class _Src, enable_if_t<_Wrapped_seekable_v<iterator_type, const _Src&>, int> = 0>
-    constexpr void _Seek_to(const move_iterator<_Src>& _It) {
+    constexpr void _Seek_to(const move_iterator<_Src>& _It) noexcept(noexcept(_Current._Seek_to(_It.base()))) {
         _Current._Seek_to(_It.base());
     }
     template <class _Src, enable_if_t<_Wrapped_seekable_v<iterator_type, _Src>, int> = 0>
-    constexpr void _Seek_to(move_iterator<_Src>&& _It) {
+    constexpr void _Seek_to(move_iterator<_Src>&& _It) noexcept(noexcept(_Current._Seek_to(_STD move(_It).base()))) {
         _Current._Seek_to(_STD move(_It).base());
     }
 
@@ -3990,7 +4016,8 @@ private:
 };
 
 template <class _Iter1, class _Iter2>
-_NODISCARD _CONSTEXPR17 bool operator==(const move_iterator<_Iter1>& _Left, const move_iterator<_Iter2>& _Right)
+_NODISCARD _CONSTEXPR17 bool operator==(const move_iterator<_Iter1>& _Left,
+    const move_iterator<_Iter2>& _Right) noexcept(noexcept(_Left.base() == _Right.base())) /* strengthened */
 #ifdef __cpp_lib_concepts
     // clang-format off
     requires requires {
@@ -4002,13 +4029,15 @@ _NODISCARD _CONSTEXPR17 bool operator==(const move_iterator<_Iter1>& _Left, cons
 
 #if !_HAS_CXX20
 template <class _Iter1, class _Iter2>
-_NODISCARD _CONSTEXPR17 bool operator!=(const move_iterator<_Iter1>& _Left, const move_iterator<_Iter2>& _Right) {
+_NODISCARD _CONSTEXPR17 bool operator!=(const move_iterator<_Iter1>& _Left,
+    const move_iterator<_Iter2>& _Right) noexcept(noexcept(!(_Left == _Right))) /* strengthened */ {
     return !(_Left == _Right);
 }
 #endif // !_HAS_CXX20
 
 template <class _Iter1, class _Iter2>
-_NODISCARD _CONSTEXPR17 bool operator<(const move_iterator<_Iter1>& _Left, const move_iterator<_Iter2>& _Right)
+_NODISCARD _CONSTEXPR17 bool operator<(const move_iterator<_Iter1>& _Left,
+    const move_iterator<_Iter2>& _Right) noexcept(noexcept(_Left.base() < _Right.base())) /* strengthened */
 #ifdef __cpp_lib_concepts
     // clang-format off
     requires requires {
@@ -4019,7 +4048,8 @@ _NODISCARD _CONSTEXPR17 bool operator<(const move_iterator<_Iter1>& _Left, const
 { return _Left.base() < _Right.base(); }
 
 template <class _Iter1, class _Iter2>
-_NODISCARD _CONSTEXPR17 bool operator>(const move_iterator<_Iter1>& _Left, const move_iterator<_Iter2>& _Right)
+_NODISCARD _CONSTEXPR17 bool operator>(const move_iterator<_Iter1>& _Left,
+    const move_iterator<_Iter2>& _Right) noexcept(noexcept(_Right < _Left)) /* strengthened */
 #ifdef __cpp_lib_concepts
     // clang-format off
     requires requires { _Right < _Left; }
@@ -4028,7 +4058,8 @@ _NODISCARD _CONSTEXPR17 bool operator>(const move_iterator<_Iter1>& _Left, const
 { return _Right < _Left; }
 
 template <class _Iter1, class _Iter2>
-_NODISCARD _CONSTEXPR17 bool operator<=(const move_iterator<_Iter1>& _Left, const move_iterator<_Iter2>& _Right)
+_NODISCARD _CONSTEXPR17 bool operator<=(const move_iterator<_Iter1>& _Left,
+    const move_iterator<_Iter2>& _Right) noexcept(noexcept(!(_Right < _Left))) /* strengthened */
 #ifdef __cpp_lib_concepts
     // clang-format off
     requires requires { _Right < _Left; }
@@ -4037,7 +4068,8 @@ _NODISCARD _CONSTEXPR17 bool operator<=(const move_iterator<_Iter1>& _Left, cons
 { return !(_Right < _Left); }
 
 template <class _Iter1, class _Iter2>
-_NODISCARD _CONSTEXPR17 bool operator>=(const move_iterator<_Iter1>& _Left, const move_iterator<_Iter2>& _Right)
+_NODISCARD _CONSTEXPR17 bool operator>=(const move_iterator<_Iter1>& _Left,
+    const move_iterator<_Iter2>& _Right) noexcept(noexcept(!(_Left < _Right))) /* strengthened */
 #ifdef __cpp_lib_concepts
     // clang-format off
     requires requires { _Left < _Right; }
@@ -4047,21 +4079,23 @@ _NODISCARD _CONSTEXPR17 bool operator>=(const move_iterator<_Iter1>& _Left, cons
 
 #ifdef __cpp_lib_concepts
 template <class _Iter1, three_way_comparable_with<_Iter1> _Iter2>
-_NODISCARD constexpr compare_three_way_result_t<_Iter1, _Iter2> operator<=>(
-    const move_iterator<_Iter1>& _Left, const move_iterator<_Iter2>& _Right) {
+_NODISCARD constexpr compare_three_way_result_t<_Iter1, _Iter2> operator<=>(const move_iterator<_Iter1>& _Left,
+    const move_iterator<_Iter2>& _Right) noexcept(noexcept(_Left.base() <=> _Right.base())) /* strengthened */ {
     return _Left.base() <=> _Right.base();
 }
 #endif // __cpp_lib_concepts
 
 template <class _Iter1, class _Iter2>
-_NODISCARD _CONSTEXPR17 auto operator-(const move_iterator<_Iter1>& _Left, const move_iterator<_Iter2>& _Right)
-    -> decltype(_Left.base() - _Right.base()) {
+_NODISCARD _CONSTEXPR17 auto
+    operator-(const move_iterator<_Iter1>& _Left, const move_iterator<_Iter2>& _Right) noexcept(
+        noexcept(_Left.base() - _Right.base())) /* strengthened */ -> decltype(_Left.base() - _Right.base()) {
     return _Left.base() - _Right.base();
 }
 
 template <class _Iter>
-_NODISCARD _CONSTEXPR17 move_iterator<_Iter> operator+(
-    typename move_iterator<_Iter>::difference_type _Off, const move_iterator<_Iter>& _Right)
+_NODISCARD _CONSTEXPR17 move_iterator<_Iter>
+    operator+(typename move_iterator<_Iter>::difference_type _Off, const move_iterator<_Iter>& _Right) noexcept(
+        is_nothrow_copy_constructible_v<_Iter>&& noexcept(_Right.base() + _Off)) /* strengthened */
 #ifdef __cpp_lib_concepts
     // clang-format off
     requires requires {
@@ -4073,7 +4107,8 @@ _NODISCARD _CONSTEXPR17 move_iterator<_Iter> operator+(
 
 // FUNCTION TEMPLATE make_move_iterator
 template <class _Iter>
-_NODISCARD _CONSTEXPR17 move_iterator<_Iter> make_move_iterator(_Iter _It) { // make move_iterator from iterator
+_NODISCARD _CONSTEXPR17 move_iterator<_Iter> make_move_iterator(_Iter _It) noexcept(
+    is_nothrow_move_constructible_v<_Iter>) /* strengthened */ { // make move_iterator from iterator
     return move_iterator<_Iter>(_STD move(_It));
 }
 
