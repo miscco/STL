@@ -1215,6 +1215,7 @@
 #define __cpp_lib_to_array                     201907L
 #define __cpp_lib_type_identity                201806L
 #define __cpp_lib_unwrap_ref                   201811L
+#define __cpp_lib_constexpr_dynamic_alloc      201907L
 #endif // _HAS_CXX20
 
 #ifndef _M_CEE
