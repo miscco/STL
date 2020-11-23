@@ -523,18 +523,13 @@ STATIC_ASSERT(__cpp_lib_constexpr_utility == 201811L);
 #endif
 #endif
 
-#if _HAS_CXX20 && defined(__cpp_impl_coroutine) // TRANSITION, Clang and EDG coroutine support
-#if __cpp_impl_coroutine >= 201902L
-#define ExpectedCppLibCoroutine 201902L
-#else
-#define ExpectedCppLibCoroutine 197000L // TRANSITION, VS 2019 16.8 Preview 4
-#endif
+#if _HAS_CXX20 && defined(__cpp_impl_coroutine) // TRANSITION, Clang coroutine support
 #ifndef __cpp_lib_coroutine
 #error __cpp_lib_coroutine is not defined
-#elif __cpp_lib_coroutine != ExpectedCppLibCoroutine
-#error __cpp_lib_coroutine is not ExpectedCppLibCoroutine
+#elif __cpp_lib_coroutine != 201902L
+#error __cpp_lib_coroutine is not 201902L
 #else
-STATIC_ASSERT(__cpp_lib_coroutine == ExpectedCppLibCoroutine);
+STATIC_ASSERT(__cpp_lib_coroutine == 201902L);
 #endif
 #else
 #ifdef __cpp_lib_coroutine
@@ -1281,6 +1276,20 @@ STATIC_ASSERT(__cpp_lib_shift == 201806L);
 #endif
 
 #if _HAS_CXX20
+#ifndef __cpp_lib_smart_ptr_for_overwrite
+#error __cpp_lib_smart_ptr_for_overwrite is not defined
+#elif __cpp_lib_smart_ptr_for_overwrite != 202002L
+#error __cpp_lib_smart_ptr_for_overwrite is not 202002L
+#else
+STATIC_ASSERT(__cpp_lib_smart_ptr_for_overwrite == 202002L);
+#endif
+#else
+#ifdef __cpp_lib_smart_ptr_for_overwrite
+#error __cpp_lib_smart_ptr_for_overwrite is defined
+#endif
+#endif
+
+#if _HAS_CXX20
 #ifndef __cpp_lib_span
 #error __cpp_lib_span is not defined
 #elif __cpp_lib_span != 202002L
@@ -1341,6 +1350,20 @@ STATIC_ASSERT(__cpp_lib_string_view == 201803L);
 #else
 #ifdef __cpp_lib_string_view
 #error __cpp_lib_string_view is defined
+#endif
+#endif
+
+#if _HAS_CXX20 && defined(__cpp_lib_concepts) // TRANSITION, GH-395
+#ifndef __cpp_lib_three_way_comparison
+#error __cpp_lib_three_way_comparison is not defined
+#elif __cpp_lib_three_way_comparison != 201711L
+#error __cpp_lib_three_way_comparison is not 201711L
+#else
+STATIC_ASSERT(__cpp_lib_three_way_comparison == 201711L);
+#endif
+#else
+#ifdef __cpp_lib_three_way_comparison
+#error __cpp_lib_three_way_comparison is defined
 #endif
 #endif
 
