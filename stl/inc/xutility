@@ -5540,13 +5540,12 @@ _NODISCARD _CONSTEXPR20 _InIt find(_InIt _First, const _InIt _Last, const _Ty& _
 #if _HAS_IF_CONSTEXPR
     if constexpr (_Is_vb_iterator<_InIt> && is_same_v<_Ty, bool>) {
         return _Find_vbool(_First, _Last, _Val);
-    } else {
+    } else
 #endif // _HAS_IF_CONSTEXPR
+    {
         _Seek_wrapped(_First, _Find_unchecked(_Get_unwrapped(_First), _Get_unwrapped(_Last), _Val));
         return _First;
-#if _HAS_IF_CONSTEXPR
     }
-#endif // _HAS_IF_CONSTEXPR
 }
 
 #if _HAS_CXX17
@@ -5559,11 +5558,11 @@ template <class _InIt, class _Ty>
 _NODISCARD _CONSTEXPR20 _Iter_diff_t<_InIt> count(const _InIt _First, const _InIt _Last, const _Ty& _Val) {
     // count elements that match _Val
     _Adl_verify_range(_First, _Last);
-#ifdef __cpp_lib_bitops
+#if _HAS_IF_CONSTEXPR
     if constexpr (_Is_vb_iterator<_InIt> && is_same_v<_Ty, bool>) {
         return _Count_vbool(_First, _Last, _Val);
     } else
-#endif // __cpp_lib_bitops
+#endif // _HAS_IF_CONSTEXPR
     {
         auto _UFirst               = _Get_unwrapped(_First);
         const auto _ULast          = _Get_unwrapped(_Last);
