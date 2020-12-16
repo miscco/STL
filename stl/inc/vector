@@ -2957,7 +2957,7 @@ _NODISCARD _CONSTEXPR20 _InIt _Find_vbool(_InIt _First, const _InIt _Last, const
         return _First;
     }
 
-    _Vbase* _VbFirst            = const_cast<_Vbase*>(_First._Myptr);
+    const _Vbase* _VbFirst      = _First._Myptr;
     const _Vbase* const _VbLast = _Last._Myptr;
 
     const auto _FirstSourceMask = static_cast<_Vbase>(-1) << _First._Myoff;
@@ -3007,7 +3007,7 @@ _NODISCARD _CONSTEXPR20 _Iter_diff_t<_InIt> _Count_vbool(_InIt _First, const _In
         return _Count;
     }
 
-    _Vbase* _VbFirst            = const_cast<_Vbase*>(_First._Myptr);
+    const _Vbase* _VbFirst      = _First._Myptr;
     const _Vbase* const _VbLast = _Last._Myptr;
 
     const auto _FirstSourceMask = static_cast<_Vbase>(-1) << _First._Myoff;
