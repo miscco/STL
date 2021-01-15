@@ -1,0 +1,2196 @@
+// deque2 standard header
+
+// Copyright (c) Microsoft Corporation.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#pragma once
+#ifndef _DEQUE2_
+#define _DEQUE2_
+#include <yvals_core.h>
+#if _STL_COMPILER_PREPROCESSOR
+#include <xmemory>
+
+#if _HAS_CXX17
+#include <xpolymorphic_allocator.h>
+#endif // _HAS_CXX17
+
+#pragma pack(push, _CRT_PACKING)
+#pragma warning(push, _STL_WARNING_LEVEL)
+#pragma warning(disable : _STL_DISABLED_WARNINGS)
+_STL_DISABLE_CLANG_WARNINGS
+#pragma push_macro("new")
+#undef new
+
+_STD_BEGIN
+
+#ifdef MSVC_INTERNAL_TESTING
+_INLINE_VAR static constexpr int _Deque_block_size = 8u;
+#else
+_INLINE_VAR static constexpr int _Deque_block_size = 512u;
+#endif // MSVC_INTERNAL_TESTING
+
+// CLASS TEMPLATE _Deque2_iterator
+template <class _Mydeque, _ConstIter _Const, _CheckedIter _Checked>
+class _Deque2_iterator : public _Iterator_base {
+public:
+    template <class, _ConstIter, _CheckedIter>
+    friend class _Deque2_iterator;
+
+    using _Blockptr = typename _Mydeque::_Blockptr;
+
+#ifdef __cpp_lib_concepts
+    using iterator_concept = random_access_iterator_tag;
+#endif // __cpp_lib_concepts
+    using iterator_category = random_access_iterator_tag;
+    using value_type        = typename _Mydeque::value_type;
+    using difference_type   = typename _Mydeque::difference_type;
+    using pointer           = typename _Mydeque::pointer;
+    using reference         = _Maybe_const<_Const == _ConstIter::_Yes, value_type>&;
+
+    _Blockptr _Block = _Blockptr(); // pointer to the block that holds the element
+    pointer _Current = pointer(); // pointer to the actual element of the element in the block
+
+    _CONSTEXPR23_CONTAINER _Deque2_iterator() noexcept = default;
+    // TRANSITION, DevCom-1331017
+    _CONSTEXPR23_CONTAINER _Deque2_iterator& operator=(const _Deque2_iterator&) noexcept = default;
+
+    _CONSTEXPR23_CONTAINER explicit _Deque2_iterator(
+        _Blockptr _Block_, pointer _Current_, const _Container_base* _Cont) noexcept
+        : _Block(_Block_), _Current(_Current_) {
+        this->_Adopt(_Cont);
+    }
+
+    template <_CheckedIter _IsChecked = _Checked, enable_if_t<_IsChecked == _CheckedIter::_No, int> = 0>
+    _CONSTEXPR23_CONTAINER explicit _Deque2_iterator(_Blockptr _Block_, pointer _Current_) noexcept
+        : _Block(_Block_), _Current(_Current_) {}
+
+    template <_ConstIter _IsConst = _Const, enable_if_t<_IsConst == _ConstIter::_Yes, int> = 0>
+    _CONSTEXPR23_CONTAINER _Deque2_iterator(const _Deque2_iterator<_Mydeque, _ConstIter::_No, _Checked>& _It) noexcept
+        : _Block(_It._Block), _Current(_It._Current) {
+        this->_Adopt(_It._Getcont());
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER reference operator*() const noexcept {
+#if _ITERATOR_DEBUG_LEVEL != 0
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            const auto _Cont = static_cast<const _Mydeque*>(this->_Getcont());
+            _STL_VERIFY(_Cont, "cannot dereference value-initialized deque2 iterator");
+            const bool _Valid = _Cont->_Begin <= _Block && _Block < _Cont->_Last && _Block->_First <= _Current
+                             && _Current < _Block->_Last;
+            _STL_VERIFY(_Valid, "cannot deference out of range deque2 iterator");
+        }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+        return *_Current;
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER pointer operator->() const noexcept {
+#if _ITERATOR_DEBUG_LEVEL != 0
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            const auto _Cont = static_cast<const _Mydeque*>(this->_Getcont());
+            _STL_VERIFY(_Cont, "cannot dereference value-initialized deque2 iterator");
+            const bool _Valid = _Cont->_Begin <= _Block && _Block < _Cont->_Last && _Block->_First <= _Current
+                             && _Current < _Block->_Last;
+            _STL_VERIFY(_Valid, "cannot deference out of range deque2 iterator");
+        }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+        return _Current;
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER reference operator[](const difference_type _Off) const noexcept {
+        const auto _Blockdiff   = (_Current - _Block->_Begin + _Off) / _Deque_block_size;
+        const auto _New_block   = _Off < 0 ? _Block - _Blockdiff : _Block + _Blockdiff;
+        const auto _New_current = _New_block->_Begin + (_Current - _Block->_Begin + _Off) % _Deque_block_size;
+#if _ITERATOR_DEBUG_LEVEL != 0
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            const auto _Cont = static_cast<const _Mydeque*>(this->_Getcont());
+            _STL_VERIFY(_Cont, "cannot subscript value-initialized deque2 iterator");
+            const bool _Valid = _Cont->_Begin <= _New_block && _New_block < _Cont->_Last
+                             && _New_block->_First <= _New_current && _New_current < _New_block->_Last;
+            _STL_VERIFY(_Valid, "cannot subscript out of range deque2 iterator");
+        }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+        return *_New_current;
+    }
+
+    _CONSTEXPR23_CONTAINER _Deque2_iterator& operator++() noexcept {
+#if _ITERATOR_DEBUG_LEVEL != 0
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            const auto _Cont = static_cast<const _Mydeque*>(this->_Getcont());
+            _STL_VERIFY(_Cont, "cannot increment value-initialized deque2 iterator");
+            const bool _Valid = _Cont->_Begin <= _Block && _Block < _Cont->_Last
+                             && (_Current < _Block->_Last || _Block < (_Cont->_Last - 1));
+            _STL_VERIFY(_Valid, "cannot increment deque2 iterator past end");
+        }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+        if (++_Current == _Block->_Begin + _Deque_block_size) {
+            ++_Block;
+            _Current = _Block->_Begin;
+        }
+        return *this;
+    }
+
+    _CONSTEXPR23_CONTAINER _Deque2_iterator operator++(int) noexcept {
+#if _ITERATOR_DEBUG_LEVEL != 0
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            const auto _Cont = static_cast<const _Mydeque*>(this->_Getcont());
+            _STL_VERIFY(_Cont, "cannot increment value-initialized deque2 iterator");
+            const bool _Valid = _Cont->_Begin <= _Block && _Block < _Cont->_Last
+                             && (_Current < _Block->_Last || _Block < (_Cont->_Last - 1));
+            _STL_VERIFY(_Valid, "cannot increment deque2 iterator past end");
+        }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+        _Deque2_iterator _Tmp = *this;
+        if (++_Current == _Block->_Begin + _Deque_block_size) {
+            ++_Block;
+            _Current = _Block->_Begin;
+        }
+        return _Tmp;
+    }
+
+    _CONSTEXPR23_CONTAINER _Deque2_iterator& operator--() noexcept {
+#if _ITERATOR_DEBUG_LEVEL != 0
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            const auto _Cont = static_cast<const _Mydeque*>(this->_Getcont());
+            _STL_VERIFY(_Cont, "cannot decrement value-initialized deque2 iterator");
+            const bool _Valid = _Cont->_Begin <= _Block && _Block < _Cont->_Last
+                             && (_Block->_First < _Current || _Block != _Cont->_Begin);
+            _STL_VERIFY(_Valid, "cannot decrement deque2 iterator past begin");
+        }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+        if (_Current == _Block->_Begin) {
+            --_Block;
+            _Current = _Block->_Begin + _Deque_block_size;
+        }
+        --_Current;
+        return *this;
+    }
+
+    _CONSTEXPR23_CONTAINER _Deque2_iterator operator--(int) noexcept {
+#if _ITERATOR_DEBUG_LEVEL != 0
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            const auto _Cont = static_cast<const _Mydeque*>(this->_Getcont());
+            _STL_VERIFY(_Cont, "cannot decrement value-initialized deque2 iterator");
+            const bool _Valid = _Cont->_Begin <= _Block && _Block < _Cont->_Last
+                             && (_Block->_First < _Current || _Block != _Cont->_Begin);
+            _STL_VERIFY(_Valid, "cannot decrement deque2 iterator past begin");
+        }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+        _Deque2_iterator _Tmp = *this;
+        if (_Current == _Block->_Begin) {
+            --_Block;
+            _Current = _Block->_Begin + _Deque_block_size;
+        }
+        --_Current;
+        return _Tmp;
+    }
+
+    _CONSTEXPR23_CONTAINER _Deque2_iterator& operator+=(const difference_type _Off) noexcept {
+        if (_Off != 0) {
+            const auto _Blockdiff   = (_Current - _Block->_Begin + _Off) / _Deque_block_size;
+            const auto _New_block   = _Off < 0 ? _Block - _Blockdiff : _Block + _Blockdiff;
+            const auto _New_current = _New_block->_Begin + (_Current - _Block->_Begin + _Off) % _Deque_block_size;
+#if _ITERATOR_DEBUG_LEVEL != 0
+            if constexpr (_Checked == _CheckedIter::_Yes) {
+                const auto _Cont = static_cast<const _Mydeque*>(this->_Getcont());
+                _STL_VERIFY(_Cont, "cannot seek value-initialized deque2 iterator");
+                const bool _Valid = _Cont->_Begin <= _New_block && _New_block < _Cont->_Last
+                                 && _New_block->_First <= _New_current && _New_current < _New_block->_Last;
+                _STL_VERIFY(_Valid, "cannot seek out of range deque2 iterator");
+            }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+            _Block   = _New_block;
+            _Current = _New_current;
+        }
+        return *this;
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER _Deque2_iterator operator+(const difference_type _Off) const noexcept {
+        _Deque2_iterator _Tmp = *this;
+        return _Tmp += _Off;
+    }
+
+    _CONSTEXPR23_CONTAINER _Deque2_iterator& operator-=(const difference_type _Off) noexcept {
+        return *this += -_Off;
+        if (_Off != 0) {
+            const auto _Blockdiff   = (_Current - _Block->_Begin - _Off) / _Deque_block_size;
+            const auto _New_block   = _Off > 0 ? _Block - _Blockdiff : _Block + _Blockdiff;
+            const auto _New_current = _New_block->_Begin + (_Current - _Block->_Begin - _Off) % _Deque_block_size;
+#if _ITERATOR_DEBUG_LEVEL != 0
+            if constexpr (_Checked == _CheckedIter::_Yes) {
+                const auto _Cont = static_cast<const _Mydeque*>(this->_Getcont());
+                _STL_VERIFY(_Cont, "cannot seek value-initialized deque2 iterator");
+                const bool _Valid = _Cont->_Begin <= _New_block && _New_block < _Cont->_Last
+                                 && _New_block->_First <= _New_current && _New_current < _New_block->_Last;
+                _STL_VERIFY(_Valid, "cannot seek out of range deque2 iterator");
+            }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+            _Block   = _New_block;
+            _Current = _New_current;
+        }
+        return *this;
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER _Deque2_iterator operator-(const difference_type _Off) const noexcept {
+        _Deque2_iterator _Tmp = *this;
+        return _Tmp -= _Off;
+    }
+
+    _NODISCARD friend _CONSTEXPR23_CONTAINER _Deque2_iterator operator+(
+        const difference_type _Off, _Deque2_iterator _Next) noexcept {
+        return _Next += _Off;
+    }
+
+    template <_ConstIter _OtherConst>
+    _NODISCARD _CONSTEXPR23_CONTAINER difference_type operator-(
+        const _Deque2_iterator<_Mydeque, _OtherConst, _Checked>& _Right) const noexcept {
+#if _ITERATOR_DEBUG_LEVEL != 0
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            _STL_VERIFY(this->_Getcont() == _Right._Getcont(), "deque2 iterators incompatible");
+        }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+        if (_Block == nullptr || _Right._Block == nullptr) { // empty deque has 0 size
+            return 0;
+        }
+
+        const auto _Block_diff   = _Block - _Right._Block;
+        const auto _Pointer_diff = _Block_diff < 0
+                                     ? (_Right._Current - _Right._Block->_Begin) - (_Current - _Block->_Begin)
+                                     : (_Current - _Block->_Begin) - (_Right._Current - _Right._Block->_Begin);
+        return static_cast<difference_type>(_Block_diff * _Deque_block_size + _Pointer_diff);
+    }
+
+    template <_ConstIter _OtherConst>
+    _NODISCARD _CONSTEXPR23_CONTAINER bool operator==(
+        const _Deque2_iterator<_Mydeque, _OtherConst, _Checked>& _Right) const noexcept {
+#if _ITERATOR_DEBUG_LEVEL != 0
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            _STL_VERIFY(this->_Getcont() == _Right._Getcont(), "deque2 iterators incompatible");
+        }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+        return _Block == _Right._Block && _Current == _Right._Current;
+    }
+
+#if _HAS_CXX20
+    template <_ConstIter _OtherConst>
+    _NODISCARD _CONSTEXPR23_CONTAINER strong_ordering operator<=>(
+        const _Deque2_iterator<_Mydeque, _OtherConst, _Checked>& _Right) const noexcept {
+#if _ITERATOR_DEBUG_LEVEL != 0
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            _STL_VERIFY(this->_Getcont() == _Right._Getcont(), "deque2 iterators incompatible");
+        }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+        if (auto _Cmp = _Block <=> _Right._Block; _Cmp != 0) {
+            return _Cmp;
+        }
+        return _Current <=> _Right._Current;
+    }
+
+#else // ^^^ _HAS_CXX20 ^^^ / vvv !_HAS_CXX20 vvv
+
+    template <_ConstIter _OtherConst>
+    _NODISCARD bool operator!=(const _Deque2_iterator<_Mydeque, _OtherConst, _Checked>& _Right) const noexcept {
+        return !(*this == _Right);
+    }
+
+    template <_ConstIter _OtherConst>
+    _NODISCARD bool operator<(const _Deque2_iterator<_Mydeque, _OtherConst, _Checked>& _Right) const noexcept {
+#if _ITERATOR_DEBUG_LEVEL != 0
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            _STL_VERIFY(this->_Getcont() == _Right._Getcont(), "deque2 iterators incompatible");
+        }
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+        if (_Block < _Right._Block) {
+            return true;
+        } else if (_Block > _Right._Block) {
+            return false;
+        } else {
+            return _Current < _Right._Current;
+        }
+    }
+
+    template <_ConstIter _OtherConst>
+    _NODISCARD bool operator>(const _Deque2_iterator<_Mydeque, _OtherConst, _Checked>& _Right) const noexcept {
+        return _Right < *this;
+    }
+
+    template <_ConstIter _OtherConst>
+    _NODISCARD bool operator<=(const _Deque2_iterator<_Mydeque, _OtherConst, _Checked>& _Right) const noexcept {
+        return !(_Right < *this);
+    }
+
+    template <_ConstIter _OtherConst>
+    _NODISCARD bool operator>=(const _Deque2_iterator<_Mydeque, _OtherConst, _Checked>& _Right) const noexcept {
+        return !(*this < _Right);
+    }
+#endif // !_HAS_CXX20
+
+#if _ITERATOR_DEBUG_LEVEL != 0
+    template <_CheckedIter _IsChecked = _Checked, enable_if_t<_IsChecked == _CheckedIter::_Yes, int> = 0>
+    _CONSTEXPR23_CONTAINER void _Verify_offset(const difference_type _Off) const noexcept {
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            if (_Off != 0) {
+                const auto _Cont = static_cast<const _Mydeque*>(this->_Getcont());
+                _STL_VERIFY(_Cont, "cannot seek value-initialized deque2 iterator");
+
+                const auto _Blockdiff   = (_Current + _Off) / _Deque_block_size;
+                const auto _New_block   = _Off < 0 ? _Block - _Blockdiff : _Block + _Blockdiff;
+                const auto _New_current = _New_block->_Begin + (_Current + _Off) % _Deque_block_size;
+                const bool _Valid       = _Cont->_Begin <= _New_block && _New_block < _Cont->_Last
+                                 && _New_block->_First <= _New_current && _New_current < _New_block->_Last;
+                _STL_VERIFY(_Valid, "cannot seek out of range deque2 iterator");
+            }
+        }
+    }
+
+    template <_ConstIter _OtherConst>
+    friend _CONSTEXPR23_CONTAINER void _Verify_range(
+        const _Deque2_iterator& _First, const _Deque2_iterator<_Mydeque, _OtherConst, _Checked>& _Last) noexcept {
+        if constexpr (_Checked == _CheckedIter::_Yes) {
+            _STL_VERIFY(_First <= _Last, "deque2 iterator range transposed");
+        }
+    }
+#else // ^^^ _ITERATOR_DEBUG_LEVEL != 0 ^^^ / vvv _ITERATOR_DEBUG_LEVEL == 0 vvv
+    template <_CheckedIter _IsChecked = _Checked, enable_if_t<_IsChecked == _CheckedIter::_Yes, int> = 0>
+    _CONSTEXPR23_CONTAINER void _Verify_offset(const difference_type) const noexcept {}
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+
+    using _Prevent_inheriting_unwrap = _Deque2_iterator<_Mydeque, _Const, _CheckedIter::_Yes>;
+
+    template <_CheckedIter _IsChecked = _Checked, enable_if_t<_IsChecked == _CheckedIter::_Yes, int> = 0>
+    _NODISCARD _CONSTEXPR23_CONTAINER auto _Unwrapped() const noexcept {
+        return _Deque2_iterator<_Mydeque, _Const, _CheckedIter::_No>{_Block, _Current};
+    }
+
+    template <_CheckedIter _IsChecked = _Checked, enable_if_t<_IsChecked == _CheckedIter::_Yes, int> = 0>
+    _CONSTEXPR23_CONTAINER void _Seek_to(const _Deque2_iterator<_Mydeque, _Const, _CheckedIter::_No>& _It) noexcept {
+        _Block   = _It._Block;
+        _Current = _It._Current;
+    }
+};
+
+// deque2 TYPE WRAPPERS
+template <class _Value_type, class _Alty_traits, class _Block_traits>
+struct _Deque2_iter_types {
+    using value_type      = _Value_type;
+    using size_type       = typename _Alty_traits::size_type;
+    using difference_type = typename _Alty_traits::difference_type;
+    using pointer         = typename _Alty_traits::pointer;
+    using const_pointer   = typename _Alty_traits::const_pointer;
+    using _Blockptr       = typename _Block_traits::pointer;
+};
+
+template <class _Ty, class _Block_traits>
+struct _Deque_simple_types : _Simple_types<_Ty> {
+    using _Blockptr = typename _Block_traits::pointer;
+};
+
+// CLASS TEMPLATE _Deque_block
+template <class _Pointer>
+struct _Deque_block {
+    _Pointer _Begin = _Pointer(); // Pointer to allocated storage for the elements
+    _Pointer _First = _Pointer();
+    _Pointer _Last  = _Pointer();
+};
+
+enum class _Deque_strat : uint8_t {
+    _Construct,
+    _Copy,
+    _Move,
+    _Fill,
+};
+
+// CLASS TEMPLATE _Deque2_val
+template <class _Val_types>
+class _Deque2_val : public _Container_base {
+public:
+    using value_type      = typename _Val_types::value_type;
+    using size_type       = typename _Val_types::size_type;
+    using difference_type = typename _Val_types::difference_type;
+    using pointer         = typename _Val_types::pointer;
+    using const_pointer   = typename _Val_types::const_pointer;
+    using reference       = value_type&;
+    using const_reference = const value_type&;
+    using _Blockptr       = typename _Val_types::_Blockptr;
+
+    _CONSTEXPR23_CONTAINER _Deque2_val() noexcept = default;
+
+    _CONSTEXPR23_CONTAINER _Deque2_val(_Blockptr _Begin_, _Blockptr _First_, _Blockptr _Last_, _Blockptr _End_) noexcept
+        : _Begin(_Begin_), _First(_First_), _Last(_Last_), _End(_End_) {}
+
+    _CONSTEXPR23_CONTAINER void _Swap_val(_Deque2_val& _Right) noexcept {
+        this->_Swap_proxy_and_iterators(_Right);
+        _Swap_adl(_Begin, _Right._Begin);
+        _Swap_adl(_First, _Right._First);
+        _Swap_adl(_Last, _Right._Last);
+        _Swap_adl(_End, _Right._End);
+    }
+
+    _CONSTEXPR23_CONTAINER void _Take_contents(_Deque2_val& _Right) noexcept {
+        this->_Swap_proxy_and_iterators(_Right);
+        _Begin = _Right._Begin;
+        _First = _Right._First;
+        _Last  = _Right._Last;
+        _End   = _Right._End;
+
+        _Right._Begin = nullptr;
+        _Right._First = nullptr;
+        _Right._Last  = nullptr;
+        _Right._End   = nullptr;
+    }
+
+    _Blockptr _Begin = nullptr; // pointer to begin of the block array
+    _Blockptr _First = nullptr; // pointer to begin of the used blocks
+    _Blockptr _Last  = nullptr; // pointer to the end of the used blocks
+    _Blockptr _End   = nullptr; // pointer to end of the block array
+};
+
+// CLASS TEMPLATE deque2
+template <class _Ty, class _Alloc = allocator<_Ty>>
+class deque2 {
+private:
+    friend _Tidy_guard<deque2>;
+    static_assert(!_ENFORCE_MATCHING_ALLOCATORS || is_same_v<_Ty, typename _Alloc::value_type>,
+        _MISMATCHED_ALLOCATOR_MESSAGE("deque2<T, Allocator>", "T"));
+
+    using _Alty           = _Rebind_alloc_t<_Alloc, _Ty>;
+    using _Alty_traits    = allocator_traits<_Alty>;
+    using _Alblock        = _Rebind_alloc_t<_Alloc, _Deque_block<typename _Alty_traits::pointer>>;
+    using _Alblock_traits = allocator_traits<_Alblock>;
+    using _Blockptr       = typename _Alblock_traits::pointer;
+
+    using _Scary_val = _Deque2_val<conditional_t<_Is_simple_alloc_v<_Alty>, _Deque_simple_types<_Ty, _Alblock_traits>,
+        _Deque2_iter_types<_Ty, _Alty_traits, _Alblock_traits>>>;
+
+public:
+    using value_type      = _Ty;
+    using allocator_type  = _Alloc;
+    using pointer         = typename _Alty_traits::pointer;
+    using const_pointer   = typename _Alty_traits::const_pointer;
+    using reference       = _Ty&;
+    using const_reference = const _Ty&;
+    using size_type       = typename _Alty_traits::size_type;
+    using difference_type = typename _Alty_traits::difference_type;
+
+    using iterator                  = _Deque2_iterator<_Scary_val, _ConstIter::_No, _CheckedIter::_Yes>;
+    using const_iterator            = _Deque2_iterator<_Scary_val, _ConstIter::_Yes, _CheckedIter::_Yes>;
+    using _Unchecked_iterator       = _Deque2_iterator<_Scary_val, _ConstIter::_No, _CheckedIter::_No>;
+    using _Unchecked_const_iterator = _Deque2_iterator<_Scary_val, _ConstIter::_Yes, _CheckedIter::_No>;
+    using reverse_iterator          = _STD reverse_iterator<iterator>;
+    using const_reverse_iterator    = _STD reverse_iterator<const_iterator>;
+
+    // deque.cons
+    _CONSTEXPR23_CONTAINER deque2() noexcept(is_nothrow_default_constructible_v<_Alty>)
+        : _Mypair(_Zero_then_variadic_args_t{}) {
+        _Mypair._Myval2._Alloc_proxy(_GET_PROXY_ALLOCATOR(_Alty, _Getal()));
+    }
+
+    _CONSTEXPR23_CONTAINER explicit deque2(const _Alloc& _Al) : _Mypair(_One_then_variadic_args_t{}, _Al) {
+        _Mypair._Myval2._Alloc_proxy(_GET_PROXY_ALLOCATOR(_Alty, _Getal()));
+    }
+
+    _CONSTEXPR23_CONTAINER explicit deque2(_CRT_GUARDOVERFLOW size_type _Count, const _Alloc& _Al = _Alloc())
+        : _Mypair(_One_then_variadic_args_t{}, _Al) {
+        auto&& _Alproxy = _GET_PROXY_ALLOCATOR(_Alty, _Getal());
+        _Container_proxy_ptr<_Alty> _Proxy(_Alproxy, _Mypair._Myval2);
+        _Construct_range<_Deque_strat::_Construct>(
+            _Counted_insert_iterator<deque2>{_Count}, _Counted_insert_iterator<deque2>{});
+        _Proxy._Release();
+    }
+
+    _CONSTEXPR23_CONTAINER deque2(_CRT_GUARDOVERFLOW size_type _Count, const _Ty& _Val, const _Alloc& _Al = _Alloc())
+        : _Mypair(_One_then_variadic_args_t{}, _Al) {
+        auto&& _Alproxy = _GET_PROXY_ALLOCATOR(_Alty, _Getal());
+        _Container_proxy_ptr<_Alty> _Proxy(_Alproxy, _Mypair._Myval2);
+        _Alloc_temporary<_Alty> _Tmp_storage{_Getal(), _Val}; // handle aliasing
+        _Construct_range<_Deque_strat::_Copy>(_Counted_insert_iterator<deque2>{_Count, &_Tmp_storage._Storage._Value},
+            _Counted_insert_iterator<deque2>{});
+        _Proxy._Release();
+    }
+
+    _CONSTEXPR23_CONTAINER deque2(const deque2& _Right)
+        : _Mypair(_One_then_variadic_args_t{}, _Alty_traits::select_on_container_copy_construction(_Right._Getal())) {
+        auto&& _Alproxy = _GET_PROXY_ALLOCATOR(_Alty, _Getal());
+        _Container_proxy_ptr<_Alty> _Proxy(_Alproxy, _Mypair._Myval2);
+        _Construct_range<_Deque_strat::_Copy>(_Right._Unchecked_begin(), _Right._Unchecked_end());
+        _Proxy._Release();
+    }
+
+    _CONSTEXPR23_CONTAINER deque2(const deque2& _Right, const _Alloc& _Al) : _Mypair(_One_then_variadic_args_t{}, _Al) {
+        auto&& _Alproxy = _GET_PROXY_ALLOCATOR(_Alty, _Getal());
+        _Container_proxy_ptr<_Alty> _Proxy(_Alproxy, _Mypair._Myval2);
+        _Construct_range<_Deque_strat::_Copy>(_Right._Unchecked_begin(), _Right._Unchecked_end());
+        _Proxy._Release();
+    }
+
+    _CONSTEXPR23_CONTAINER deque2(deque2&& _Right)
+        : _Mypair(_One_then_variadic_args_t{}, _STD move(_Right._Getal()),
+            _STD exchange(_Right._Mypair._Myval2._Begin, nullptr), //
+            _STD exchange(_Right._Mypair._Myval2._First, nullptr), //
+            _STD exchange(_Right._Mypair._Myval2._Last, nullptr), //
+            _STD exchange(_Right._Mypair._Myval2._End, nullptr)) {
+        _Mypair._Myval2._Alloc_proxy(_GET_PROXY_ALLOCATOR(_Alty, _Getal()));
+        _Mypair._Myval2._Swap_proxy_and_iterators(_Right._Mypair._Myval2);
+    }
+
+    _CONSTEXPR23_CONTAINER deque2(deque2&& _Right, const _Alloc& _Al) : _Mypair(_One_then_variadic_args_t{}, _Al) {
+        auto&& _Alproxy = _GET_PROXY_ALLOCATOR(_Alty, _Getal());
+        _Container_proxy_ptr<_Alty> _Proxy(_Alproxy, _Mypair._Myval2);
+        if constexpr (!_Alty_traits::is_always_equal::value) {
+            if (_Getal() != _Right._Getal()) {
+                const auto& _Right_data     = _Right._Mypair._Myval2;
+                const _Blockptr _Rightfirst = _Right_data._First;
+                const _Blockptr _Rightlast  = _Right_data._Last;
+                if (_Rightfirst != _Rightlast) {
+                    // TODO: We only need to buy the raw blocks without allocating memory
+                    _Buy_raw(_Right.size());
+                    _Tidy_guard<deque2> _Guard{this};
+
+                    auto& _My_data = _Mypair._Myval2;
+                    // We only need to move the blocks
+                    _My_data._Last = _Uninitialized_move(_Rightfirst, _Rightlast, _My_data._First, _Getal());
+                    _Right._Tidy();
+                }
+                _Proxy._Release();
+                return;
+            }
+        }
+
+        _Mypair._Myval2._Take_contents(_Right._Mypair._Myval2);
+        _Proxy._Release();
+    }
+
+    _CONSTEXPR23_CONTAINER ~deque2() noexcept {
+        _Tidy();
+#if _ITERATOR_DEBUG_LEVEL != 0
+        auto&& _Alproxy = _GET_PROXY_ALLOCATOR(_Alty, _Getal());
+        _Delete_plain_internal(_Alproxy, _STD exchange(_Mypair._Myval2._Myproxy, nullptr));
+#endif // _ITERATOR_DEBUG_LEVEL != 0
+    }
+
+    _CONSTEXPR23_CONTAINER deque2& operator=(const deque2& _Right) {
+        if (this == _STD addressof(_Right)) {
+            return *this;
+        }
+
+        if constexpr (_Choose_pocca<_Alty>{}) {
+            if (_Getal() != _Right._Getal()) {
+                _Tidy();
+                _Mypair._Myval2._Reload_proxy(
+                    _GET_PROXY_ALLOCATOR(_Alty, _Getal()), _GET_PROXY_ALLOCATOR(_Alty, _Right._Getal()));
+            }
+        }
+
+        _Pocca(_Getal(), _Right._Getal());
+        _Assign_range<_Deque_strat::_Copy>(_Right._Unchecked_begin(), _Right._Unchecked_end());
+        return *this;
+    }
+
+    _CONSTEXPR23_CONTAINER deque2& operator=(deque2&& _Right) noexcept(
+        !is_same_v<_Choose_pocma<_Alty>, _No_propagate_allocators>) {
+        if (this == _STD addressof(_Right)) {
+            return *this;
+        }
+
+        auto& _Al         = _Getal();
+        auto& _My_data    = _Mypair._Myval2;
+        auto& _Right_data = _Right._Mypair._Myval2;
+        if (_Al == _Right._Getal()) {
+            _Tidy();
+            _Pocma(_Al, _Right._Getal());
+            _My_data._Take_contents(_Right._Mypair._Myval2);
+            return *this;
+        }
+
+        using _Strat = _Choose_pocma<_Alty>;
+        if constexpr (is_same_v<_Strat, _No_propagate_allocators>) {
+            _TRY_BEGIN
+            _Assign_range<_Deque_strat::_Move>(_Right._Unchecked_begin(), _Right._Unchecked_end());
+            _CATCH_ALL
+            _Right._Erase_after(_Right_data._First, _Right_data._First->_First);
+            _RERAISE;
+            _CATCH_END
+            _Right._Erase_after(_Right_data._First, _Right_data._First->_First);
+        } else {
+            _Tidy();
+#if _ITERATOR_DEBUG_LEVEL != 0
+            // intentionally slams into noexcept on OOM, TRANSITION, VSO-466800
+            _Mypair._Myval2._Reload_proxy(
+                _GET_PROXY_ALLOCATOR(_Alty, _Getal()), _GET_PROXY_ALLOCATOR(_Alty, _Right._Getal()));
+#endif
+            _Pocma(_Al, _Right._Getal());
+            _Mypair._Myval2._Take_contents(_Right._Mypair._Myval2);
+        }
+        return *this;
+    }
+
+    _CONSTEXPR23_CONTAINER deque2& operator=(initializer_list<_Ty> _Ilist) {
+        _Assign_range<_Deque_strat::_Copy>(_Ilist.begin(), _Ilist.end());
+        return *this;
+    }
+
+    template <class _Iter, enable_if_t<_Is_iterator_v<_Iter>, int> = 0>
+    _CONSTEXPR23_CONTAINER deque2(_Iter _IFirst, _Iter _ILast) : _Mypair(_Zero_then_variadic_args_t{}) {
+        auto&& _Alproxy = _GET_PROXY_ALLOCATOR(_Alty, _Getal());
+        _Container_proxy_ptr<_Alty> _Proxy(_Alproxy, _Mypair._Myval2);
+        _Adl_verify_range(_IFirst, _ILast);
+        _Construct_range<_Deque_strat::_Copy>(_IFirst, _ILast);
+        _Proxy._Release();
+    }
+
+    template <class _Iter, enable_if_t<_Is_iterator_v<_Iter>, int> = 0>
+    _CONSTEXPR23_CONTAINER deque2(_Iter _IFirst, _Iter _ILast, const _Alloc& _Al)
+        : _Mypair(_One_then_variadic_args_t{}, _Al) {
+        auto&& _Alproxy = _GET_PROXY_ALLOCATOR(_Alty, _Getal());
+        _Container_proxy_ptr<_Alty> _Proxy(_Alproxy, _Mypair._Myval2);
+        _Adl_verify_range(_IFirst, _ILast);
+        _Construct_range<_Deque_strat::_Copy>(_IFirst, _ILast);
+        _Proxy._Release();
+    }
+
+    _CONSTEXPR23_CONTAINER deque2(initializer_list<_Ty> _Ilist, const _Alloc& _Al = _Alloc())
+        : _Mypair(_One_then_variadic_args_t{}, _Al) {
+        auto&& _Alproxy = _GET_PROXY_ALLOCATOR(_Alty, _Getal());
+        _Container_proxy_ptr<_Alty> _Proxy(_Alproxy, _Mypair._Myval2);
+        _Construct_range<_Deque_strat::_Copy>(_Ilist.begin(), _Ilist.end());
+        _Proxy._Release();
+    }
+
+    // deque2.assign
+    _CONSTEXPR23_CONTAINER void assign(_CRT_GUARDOVERFLOW size_type _Count, const _Ty& _Val) {
+        auto& _My_data = _Mypair._Myval2;
+        _My_data._Orphan_all();
+
+        if (_Count == 0) {
+            _Erase_after(_My_data._First, _My_data._First ? _My_data._First->_First : nullptr);
+        } else {
+            _Alloc_temporary<_Alty> _Tmp_storage(_Getal(), _Val); // handle aliasing
+            _Assign_range<_Deque_strat::_Copy>(_Counted_insert_iterator<deque2>{_Count, &_Tmp_storage._Storage._Value},
+                _Counted_insert_iterator<deque2>{});
+        }
+    }
+
+    template <class _Iter, enable_if_t<_Is_iterator_v<_Iter>, int> = 0>
+    _CONSTEXPR23_CONTAINER void assign(_Iter _IFirst, _Iter _ILast) {
+        _Adl_verify_range(_IFirst, _ILast);
+        _Assign_range<_Deque_strat::_Copy>(_IFirst, _ILast);
+    }
+
+    _CONSTEXPR23_CONTAINER void assign(initializer_list<_Ty> _Ilist) {
+        _Assign_range<_Deque_strat::_Copy>(_Ilist.begin(), _Ilist.end());
+    }
+
+    // deque2.iterators
+    _NODISCARD _CONSTEXPR23_CONTAINER iterator begin() noexcept {
+        auto& _My_data = _Mypair._Myval2;
+        if (_My_data._Begin == nullptr) {
+            return iterator{nullptr, nullptr, _STD addressof(_My_data)};
+        }
+
+        return iterator{_My_data._First, _My_data._First->_First, _STD addressof(_My_data)};
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER const_iterator begin() const noexcept {
+        auto& _My_data = _Mypair._Myval2;
+        if (_My_data._Begin == nullptr) {
+            return const_iterator{nullptr, nullptr, _STD addressof(_My_data)};
+        }
+
+        return const_iterator{_My_data._First, _My_data._First->_First, _STD addressof(_My_data)};
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER iterator end() noexcept {
+        auto& _My_data = _Mypair._Myval2;
+        if (_My_data._Begin == nullptr) {
+            return iterator{nullptr, nullptr, _STD addressof(_My_data)};
+        } else if (_My_data._First == _My_data._Last) {
+            return iterator{_My_data._Last, _My_data._Last->_Last, _STD addressof(_My_data)};
+        } else {
+            const auto _Final = (_My_data._Last - 1);
+            const auto _Block = _Final->_Last == _Final->_Begin + _Deque_block_size ? _My_data._Last : _Final;
+            return iterator{_Block, _Block->_Last, _STD addressof(_My_data)};
+        }
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER const_iterator end() const noexcept {
+        auto& _My_data = _Mypair._Myval2;
+        if (_My_data._Begin == nullptr) {
+            return const_iterator{nullptr, nullptr, _STD addressof(_My_data)};
+        } else if (_My_data._First == _My_data._Last) {
+            return const_iterator{_My_data._Last, _My_data._Last->_Last, _STD addressof(_My_data)};
+        } else {
+            const auto _Final = (_My_data._Last - 1);
+            const auto _Block = _Final->_Last == _Final->_Begin + _Deque_block_size ? _My_data._Last : _Final;
+            return const_iterator{_Block, _Block->_Last, _STD addressof(_My_data)};
+        }
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER reverse_iterator rbegin() noexcept {
+        return reverse_iterator(end());
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER const_reverse_iterator rbegin() const noexcept {
+        return const_reverse_iterator(end());
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER reverse_iterator rend() noexcept {
+        return reverse_iterator(begin());
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER const_reverse_iterator rend() const noexcept {
+        return const_reverse_iterator(begin());
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER const_iterator cbegin() const noexcept {
+        return begin();
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER const_iterator cend() const noexcept {
+        return end();
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER const_reverse_iterator crbegin() const noexcept {
+        return rbegin();
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER const_reverse_iterator crend() const noexcept {
+        return rend();
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER _Unchecked_iterator _Unchecked_begin() noexcept {
+        auto& _My_data = _Mypair._Myval2;
+        if (_My_data._Begin == nullptr) {
+            return _Unchecked_iterator{nullptr, nullptr};
+        }
+
+        return _Unchecked_iterator{_My_data._First, _My_data._First->_First};
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER _Unchecked_const_iterator _Unchecked_begin() const noexcept {
+        auto& _My_data = _Mypair._Myval2;
+        if (_My_data._Begin == nullptr) {
+            return _Unchecked_iterator{nullptr, nullptr};
+        }
+
+        return _Unchecked_iterator{_My_data._First, _My_data._First->_First};
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER _Unchecked_iterator _Unchecked_end() noexcept {
+        auto& _My_data = _Mypair._Myval2;
+        if (_My_data._Begin == nullptr) {
+            return _Unchecked_iterator{nullptr, nullptr};
+        } else if (_My_data._First == _My_data._Last) {
+            return _Unchecked_iterator{_My_data._Last, _My_data._Last->_Last};
+        } else {
+            const auto _Final = (_My_data._Last - 1);
+            const auto _Block = _Final->_Last == _Final->_Begin + _Deque_block_size ? _My_data._Last : _Final;
+            return _Unchecked_iterator{_Block, _Block->_Last};
+        }
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER _Unchecked_const_iterator _Unchecked_end() const noexcept {
+        auto& _My_data = _Mypair._Myval2;
+        if (_My_data._Begin == nullptr) {
+            return _Unchecked_iterator{nullptr, nullptr};
+        } else if (_My_data._First == _My_data._Last) {
+            return _Unchecked_iterator{_My_data._Last, _My_data._Last->_Last};
+        } else {
+            const auto _Final = (_My_data._Last - 1);
+            const auto _Block = _Final->_Last == _Final->_Begin + _Deque_block_size ? _My_data._Last : _Final;
+            return _Unchecked_iterator{_Block, _Block->_Last};
+        }
+    }
+
+    // deque2.capacity
+    _NODISCARD _CONSTEXPR23_CONTAINER bool empty() const noexcept {
+        auto& _My_data = _Mypair._Myval2;
+        return _My_data._First == _My_data._Last;
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER size_type size() const noexcept {
+        auto& _My_data          = _Mypair._Myval2;
+        const _Blockptr& _First = _My_data._First;
+        const _Blockptr& _Last  = _My_data._Last;
+        if (_First == _Last) {
+            return 0;
+        } else if (_First + 1 == _Last) {
+            return static_cast<size_type>(_First->_Last - _First->_First);
+        } else {
+            const auto _Num_full_blocks  = _Last - _First - 2;
+            const auto _First_block_size = _First->_Last - _First->_First;
+            const auto _Final            = _Last - 1;
+            const auto _Final_block_size = _Final->_Last - _Final->_First;
+            return static_cast<size_type>(_First_block_size + _Num_full_blocks * _Deque_block_size + _Final_block_size);
+        }
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER size_type max_size() const noexcept {
+        return (_STD min)(
+            static_cast<size_type>((numeric_limits<difference_type>::max)()), _Alty_traits::max_size(_Getal()));
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER allocator_type get_allocator() const noexcept {
+        return static_cast<allocator_type>(_Getal());
+    }
+
+    _CONSTEXPR23_CONTAINER void resize(_CRT_GUARDOVERFLOW size_type _Count) {
+        // trim or append copies of _Val, provide strong guarantee
+        const auto _Old_size = size();
+        if (_Count == _Old_size) {
+            // Done
+        } else if (_Count < _Old_size) {
+            const auto _Pos = _To_iter(_Count);
+            _Erase_after(_Pos._Block, _Pos._Current);
+        } else {
+            _Append_back<_Deque_strat::_Construct>(
+                _Counted_insert_iterator<deque2>{_Count - _Old_size}, _Counted_insert_iterator<deque2>{});
+        }
+    }
+
+    _CONSTEXPR23_CONTAINER void resize(_CRT_GUARDOVERFLOW size_type _Count, const _Ty& _Val) {
+        // trim or append copies of _Val, provide strong guarantee
+        const auto _Old_size = size();
+        if (_Count == _Old_size) {
+            // Done
+        } else if (_Count < _Old_size) {
+            const auto _Pos = _To_iter(_Count);
+            _Erase_after(_Pos._Block, _Pos._Current);
+        } else {
+            _Alloc_temporary<_Alty> _Tmp_storage(_Getal(), _Val); // handle aliasing
+            _Append_back<_Deque_strat::_Fill>(
+                _Counted_insert_iterator<deque2>{_Count - _Old_size, &_Tmp_storage._Storage._Value},
+                _Counted_insert_iterator<deque2>{});
+        }
+    }
+
+    // deque2.access
+    _NODISCARD _CONSTEXPR23_CONTAINER _Ty& operator[](const size_type _Off) noexcept /* strengthened */ {
+#if _CONTAINER_DEBUG_LEVEL > 0
+        _STL_VERIFY(_Off < size(), "deque2 subscript out of range");
+#endif // _CONTAINER_DEBUG_LEVEL > 0
+
+        const auto _Pos = _To_iter(_Off);
+        return *_Pos._Current;
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER const _Ty& operator[](const size_type _Off) const noexcept /* strengthened */ {
+#if _CONTAINER_DEBUG_LEVEL > 0
+        _STL_VERIFY(_Off < size(), "deque2 subscript out of range");
+#endif // _CONTAINER_DEBUG_LEVEL > 0
+
+        const auto _Pos = _To_iter(_Off);
+        return *_Pos._Current;
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER _Ty& at(const size_type _Off) {
+        if (size() <= _Off) {
+            _Xrange();
+        }
+
+        const auto _Pos = _To_iter(_Off);
+        return *_Pos._Current;
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER const _Ty& at(const size_type _Off) const {
+        if (size() <= _Off) {
+            _Xrange();
+        }
+
+        const auto _Pos = _To_iter(_Off);
+        return *_Pos._Current;
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER _Ty& front() noexcept /* strengthened */ {
+        auto& _My_data = _Mypair._Myval2;
+#if _CONTAINER_DEBUG_LEVEL > 0
+        _STL_VERIFY(_My_data._First != _My_data._Last, "front() called on empty deque2");
+#endif // _CONTAINER_DEBUG_LEVEL > 0
+
+        const auto _Current = _My_data._First;
+        return *_Current->_First;
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER const _Ty& front() const noexcept /* strengthened */ {
+        auto& _My_data = _Mypair._Myval2;
+#if _CONTAINER_DEBUG_LEVEL > 0
+        _STL_VERIFY(_My_data._First != _My_data._Last, "front() called on empty deque2");
+#endif // _CONTAINER_DEBUG_LEVEL > 0
+
+        const auto _Current = _My_data._First;
+        return *_Current->_First;
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER _Ty& back() noexcept /* strengthened */ {
+        auto& _My_data = _Mypair._Myval2;
+#if _CONTAINER_DEBUG_LEVEL > 0
+        _STL_VERIFY(_My_data._First != _My_data._Last, "back() called on empty deque2");
+#endif // _CONTAINER_DEBUG_LEVEL > 0
+
+        const auto _Current = _My_data._Last - 1;
+        return *(_Current->_Last - 1);
+    }
+
+    _NODISCARD _CONSTEXPR23_CONTAINER const _Ty& back() const noexcept /* strengthened */ {
+        auto& _My_data = _Mypair._Myval2;
+#if _CONTAINER_DEBUG_LEVEL > 0
+        _STL_VERIFY(_My_data._First != _My_data._Last, "back() called on empty deque2");
+#endif // _CONTAINER_DEBUG_LEVEL > 0
+
+        const auto _Current = _My_data._Last - 1;
+        return *(_Current->_Last - 1);
+    }
+
+    // deque2.modifiers
+    template <class... _Valty>
+    _CONSTEXPR23_CONTAINER decltype(auto) emplace_back(_Valty&&... _Val) {
+        auto& _Al         = _Getal();
+        auto& _My_data    = _Mypair._Myval2;
+        _Blockptr& _First = _My_data._First;
+        _Blockptr& _Last  = _My_data._Last;
+        _Blockptr& _End   = _My_data._End;
+
+        _Blockptr _Target;
+        if (_First != _Last && (_Last - 1)->_Last != (_Last - 1)->_Begin + _Deque_block_size) {
+            const auto _UEnd = _Unchecked_end();
+            _Orphan_range(_UEnd, _UEnd);
+            _Target = _Last - 1;
+        } else if (_Last != _End) {
+            const auto _UEnd = _Unchecked_end();
+            _Orphan_range(_UEnd, _UEnd);
+            _Target = _Last;
+        } else {
+            _Grow_blocks_right(1);
+            _Target = _My_data._Last;
+        }
+
+        _Alty_traits::construct(_Al, _Unfancy(_Target->_Last), _STD forward<_Valty>(_Val)...);
+        ++_Target->_Last;
+        if (_Target == _My_data._Last) { // Need _My_data._Last as we could have grown
+            ++_My_data._Last;
+        }
+
+#if _HAS_CXX17
+        return _Target->_Last[-1];
+#else // ^^^ _HAS_CXX17 ^^^ // vvv !_HAS_CXX17 vvv
+        return;
+#endif // !_HAS_CXX17
+    }
+
+    template <class... _Valty>
+    _CONSTEXPR23_CONTAINER decltype(auto) emplace_front(_Valty&&... _Val) {
+        auto& _Al         = _Getal();
+        auto& _My_data    = _Mypair._Myval2;
+        _Blockptr& _Begin = _My_data._Begin;
+        _Blockptr& _First = _My_data._First;
+        _Blockptr& _Last  = _My_data._Last;
+
+        _Blockptr _Target = nullptr;
+        if (_First != _Last && _First->_First != _First->_Begin) {
+            _Target = _First;
+        } else if (_First != _Begin) {
+            _Target         = _First - 1;
+            _Target->_First = _Target->_Begin + _Deque_block_size;
+            _Target->_Last  = _Target->_Begin + _Deque_block_size;
+        } else {
+            _Grow_blocks_left(1);
+            _Target         = _My_data._First - 1;
+            _Target->_First = _Target->_Begin + _Deque_block_size;
+            _Target->_Last  = _Target->_Begin + _Deque_block_size;
+        }
+
+        _TRY_BEGIN
+        _Alty_traits::construct(_Al, _Unfancy(_Target->_First - 1), _STD forward<_Valty>(_Val)...);
+        _CATCH_ALL
+        if (_Target < _My_data._First) { // Reset invariant that an empty block holds _First == _Last == _Begin
+            _Target->_First = _Target->_Begin;
+            _Target->_Last  = _Target->_Begin;
+        }
+        _RERAISE;
+        _CATCH_END
+        --_Target->_First;
+        if (_Target < _My_data._First) { // Need _My_data._First as we could have grown
+            --_My_data._First;
+        }
+
+#if _HAS_CXX17
+        return *_Target->_First;
+#else // ^^^ _HAS_CXX17 ^^^ // vvv !_HAS_CXX17 vvv
+        return;
+#endif // !_HAS_CXX17
+    }
+
+    _CONSTEXPR23_CONTAINER void push_front(const _Ty& _Val) {
+        emplace_front(_Val);
+    }
+
+    _CONSTEXPR23_CONTAINER void push_front(_Ty&& _Val) {
+        emplace_front(_STD move(_Val));
+    }
+
+    _CONSTEXPR23_CONTAINER void push_back(const _Ty& _Val) {
+        emplace_back(_Val);
+    }
+
+    _CONSTEXPR23_CONTAINER void push_back(_Ty&& _Val) {
+        emplace_back(_STD move(_Val));
+    }
+
+    template <class... _Valty>
+    _CONSTEXPR23_CONTAINER iterator emplace(const_iterator _Where, _Valty&&... _Val) {
+        // insert by perfectly forwarding _Val at _Where
+        const auto _UWhere = _Unchecked_iterator{_Where._Block, _Where._Current};
+
+        const auto _Strat = _Choose_strategy(_UWhere, _UWhere);
+#if _ITERATOR_DEBUG_LEVEL == 2
+        auto& _My_data     = _Mypair._Myval2;
+        const auto _UBegin = _Unchecked_begin();
+        const auto _UEnd   = _Unchecked_end();
+        _STL_VERIFY(_Where._Getcont() == _STD addressof(_My_data) && _UBegin <= _UWhere && _UWhere <= _UEnd,
+            "deque2 emplace iterator outside range");
+        switch (_Strat) {
+        case _Modifier_strategy::_Shift_to_back:
+        case _Modifier_strategy::_At_front:
+            _Orphan_range(_UBegin, _UWhere);
+            break;
+        case _Modifier_strategy::_Shift_to_front:
+        case _Modifier_strategy::_At_back:
+            _Orphan_range(_UWhere, _UEnd);
+        }
+#endif // _ITERATOR_DEBUG_LEVEL == 2
+
+        switch (_Strat) {
+        case _Modifier_strategy::_Shift_to_front:
+        case _Modifier_strategy::_Shift_to_back:
+            {
+                auto& _Al = _Getal();
+                _Alloc_temporary<_Alty> _Obj(_Al, _STD forward<_Valty>(_Val)...); // handle aliasing
+                // TODO: _Create_hole
+                return iterator{};
+            }
+        case _Modifier_strategy::_At_front:
+            emplace_front(_STD forward<_Valty>(_Val)...);
+            return begin();
+        case _Modifier_strategy::_At_back:
+            emplace_back(_STD forward<_Valty>(_Val)...);
+            return end() - 1;
+        default:
+            _STL_ASSERT(false, "Invalid case");
+            return iterator{};
+        }
+    }
+
+    _CONSTEXPR23_CONTAINER iterator insert(const_iterator _Where, const _Ty& _Val) {
+        return emplace(_Where, _Val);
+    }
+
+    _CONSTEXPR23_CONTAINER iterator insert(const_iterator _Where, _Ty&& _Val) {
+        return emplace(_Where, _STD move(_Val));
+    }
+
+    _CONSTEXPR23_CONTAINER iterator insert(
+        const_iterator _Where, _CRT_GUARDOVERFLOW const size_type _Count, const _Ty& _Val) {
+        _Alloc_temporary<_Alty> _Tmp_storage(_Getal(), _Val); // handle aliasing
+        return insert(_STD move(_Where), _Counted_insert_iterator<deque2>{_Count, &_Tmp_storage._Storage._Value},
+            _Counted_insert_iterator<deque2>{});
+    }
+
+    template <class _Iter, enable_if_t<_Is_iterator_v<_Iter>, int> = 0>
+    _CONSTEXPR23_CONTAINER iterator insert(const_iterator _Where, _Iter _IFirst, _Iter _ILast) {
+        auto& _My_data     = _Mypair._Myval2;
+        const auto _UWhere = _Unchecked_iterator{_Where._Block, _Where._Current};
+
+        const auto _Strat = _Choose_strategy(_UWhere, _UWhere);
+#if _ITERATOR_DEBUG_LEVEL == 2
+        const auto _UBegin = _Unchecked_begin();
+        const auto _UEnd   = _Unchecked_end();
+        _STL_VERIFY(_Where._Getcont() == _STD addressof(_My_data) && _UBegin <= _UWhere && _UWhere <= _UEnd,
+            "deque2 emplace iterator outside range");
+        switch (_Strat) {
+        case _Modifier_strategy::_Shift_to_back:
+        case _Modifier_strategy::_At_front:
+            _Orphan_range(_UBegin, _UWhere);
+            break;
+        case _Modifier_strategy::_Shift_to_front:
+        case _Modifier_strategy::_At_back:
+            _Orphan_range(_UWhere, _UEnd);
+        }
+#endif // _ITERATOR_DEBUG_LEVEL == 2
+
+        switch (_Strat) {
+        case _Modifier_strategy::_Shift_to_front:
+        case _Modifier_strategy::_Shift_to_back:
+            return _Insert_at(_UWhere, _IFirst, _ILast);
+        case _Modifier_strategy::_At_front:
+            return _Append_front<_Deque_strat::_Copy>(_STD move(_IFirst), _STD move(_ILast));
+        case _Modifier_strategy::_At_back:
+            return _Append_back<_Deque_strat::_Copy>(_STD move(_IFirst), _STD move(_ILast));
+        default:
+            _STL_ASSERT(false, "Invalid case");
+            return iterator{};
+        }
+    }
+
+    _CONSTEXPR23_CONTAINER iterator insert(const_iterator _Where, initializer_list<_Ty> _Ilist) {
+        return insert(_Where, _Ilist.begin(), _Ilist.end());
+    }
+
+    _CONSTEXPR23_CONTAINER void pop_front() noexcept /* strengthened */ {
+        auto& _My_data    = _Mypair._Myval2;
+        _Blockptr& _First = _My_data._First;
+
+#if _ITERATOR_DEBUG_LEVEL == 2
+        _STL_VERIFY(_First != _My_data._Last, "deque2 empty before pop");
+        const auto _UBegin = _Unchecked_begin();
+        _Orphan_range(_UBegin, _UBegin);
+#endif // _ITERATOR_DEBUG_LEVEL == 2
+
+        _Alty_traits::destroy(_Getal(), _Unfancy(_First->_First));
+        if (++_First->_First == _First->_Last) {
+            _First->_First = _First->_Begin;
+            _First->_Last  = _First->_Begin;
+            ++_First;
+        }
+    }
+
+    _CONSTEXPR23_CONTAINER void pop_back() noexcept /* strengthened */ {
+        auto& _My_data   = _Mypair._Myval2;
+        _Blockptr _Final = _My_data._Last - 1;
+
+#if _ITERATOR_DEBUG_LEVEL == 2
+        _STL_VERIFY(_My_data._First != _My_data._Last, "deque2 empty before pop");
+        const auto _UFinal = _Unchecked_end();
+        _Orphan_range(_UFinal - 1, _UFinal);
+#endif // _ITERATOR_DEBUG_LEVEL == 2
+
+        _Alty_traits::destroy(_Getal(), _Unfancy(_Final->_Last - 1));
+        if (--_Final->_Last == _Final->_First) {
+            _Final->_First = _Final->_Begin;
+            _Final->_Last  = _Final->_Begin;
+            --_My_data._Last;
+        }
+    }
+
+    _CONSTEXPR23_CONTAINER iterator erase(const_iterator _Where) noexcept(
+        is_nothrow_move_assignable_v<value_type>) /* strengthened */ {
+        auto& _My_data     = _Mypair._Myval2;
+        const auto _UWhere = _Unchecked_iterator{_Where._Block, _Where._Current};
+        if (_UWhere == _Unchecked_end()) {
+            return iterator{_UWhere._Block, _UWhere._Current, _STD addressof(_My_data)};
+        }
+
+        const auto _Strat = _Choose_strategy(_UWhere, _UWhere);
+#if _ITERATOR_DEBUG_LEVEL == 2
+        const auto _UBegin = _Unchecked_begin();
+        const auto _UEnd   = _Unchecked_end();
+        _STL_VERIFY(_Where._Getcont() == _STD addressof(_My_data) && _UBegin <= _UWhere && _UWhere < _UEnd,
+            "deque2 erase iterator outside range");
+        switch (_Strat) {
+        case _Modifier_strategy::_Shift_to_back:
+        case _Modifier_strategy::_At_front:
+            _Orphan_range(_UBegin, _UWhere);
+            break;
+        case _Modifier_strategy::_Shift_to_front:
+        case _Modifier_strategy::_At_back:
+            _Orphan_range(_UWhere, _UEnd);
+        }
+#endif // _ITERATOR_DEBUG_LEVEL == 2
+
+        switch (_Strat) {
+        case _Modifier_strategy::_Shift_to_front:
+            return _Erase_shift_to_front(_UWhere, _UWhere + 1);
+        case _Modifier_strategy::_Shift_to_back:
+            return _Erase_shift_to_back(_UWhere, _UWhere + 1);
+        case _Modifier_strategy::_At_front:
+            {
+                _Blockptr& _First = _My_data._First;
+                _Alty_traits::destroy(_Getal(), _Unfancy(_First->_First));
+                if (++_First->_First == _First->_Last) {
+                    _First->_First = _First->_Begin;
+                    _First->_Last  = _First->_Begin;
+                    ++_First;
+                }
+                return begin();
+            }
+        case _Modifier_strategy::_At_back:
+            {
+                auto _Final = _My_data._Last - 1;
+                _Alty_traits::destroy(_Getal(), _Unfancy(_Final->_Last - 1));
+                if (--_Final->_Last == _Final->_First) {
+                    _Final->_First = _Final->_Begin;
+                    _Final->_Last  = _Final->_Begin;
+                    --_My_data._Last;
+                }
+                return end();
+            }
+        default:
+            _STL_ASSERT(false, "Invalid case");
+            return iterator{};
+        }
+    }
+
+    _CONSTEXPR23_CONTAINER iterator erase(const_iterator _IFirst, const_iterator _ILast) noexcept(
+        is_nothrow_move_assignable_v<value_type>) /* strengthened */ {
+        auto& _My_data = _Mypair._Myval2;
+        if (_IFirst == _ILast) {
+            return iterator{_IFirst._Block, _IFirst._Current, _STD addressof(_My_data)};
+        }
+        _Adl_verify_range(_IFirst, _ILast);
+        auto _UFirst = _Unchecked_iterator{_IFirst._Block, _IFirst._Current};
+        auto _ULast  = _Unchecked_iterator{_ILast._Block, _ILast._Current};
+
+        const auto _Strat = _Choose_strategy(_UFirst, _ULast);
+#if _ITERATOR_DEBUG_LEVEL == 2
+        const auto _UBegin = _Unchecked_begin();
+        const auto _UEnd   = _Unchecked_end();
+        _STL_VERIFY(_IFirst._Getcont() == _STD addressof(_My_data) && _ILast._Getcont() == _STD addressof(_My_data)
+                        && _UBegin <= _UFirst && _UFirst < _UEnd && _UBegin <= _ULast && _ULast <= _UEnd,
+            "deque2 erase iterator outside range");
+        switch (_Strat) {
+        case _Modifier_strategy::_Shift_to_back:
+        case _Modifier_strategy::_At_front:
+            _Orphan_range(_UBegin, _UFirst);
+            break;
+        case _Modifier_strategy::_Shift_to_front:
+        case _Modifier_strategy::_At_back:
+            _Orphan_range(_ULast, _UEnd);
+        }
+#endif // _ITERATOR_DEBUG_LEVEL == 2
+
+        switch (_Strat) {
+        case _Modifier_strategy::_Shift_to_front:
+            return _Erase_shift_to_front(_UFirst, _ULast);
+        case _Modifier_strategy::_Shift_to_back:
+            return _Erase_shift_to_back(_UFirst, _ULast);
+        case _Modifier_strategy::_At_front:
+            _Erase_until(_ULast._Block, _ULast._Current);
+            return begin();
+        case _Modifier_strategy::_At_back:
+            _Erase_after(_UFirst._Block, _UFirst._Current);
+            return end();
+        default:
+            _STL_ASSERT(false, "Invalid case");
+            return iterator{};
+        }
+    }
+
+    _CONSTEXPR23_CONTAINER void clear() noexcept {
+        auto& _My_data = _Mypair._Myval2;
+
+        _My_data._Orphan_all();
+        _Erase_after(_My_data._First, _My_data._First ? _My_data._First->_First : nullptr);
+    }
+
+    _CONSTEXPR23_CONTAINER void shrink_to_fit() {
+        auto& _Al         = _Getal();
+        auto& _My_data    = _Mypair._Myval2;
+        _Blockptr& _Begin = _My_data._Begin;
+        _Blockptr& _First = _My_data._First;
+        _Blockptr& _Last  = _My_data._Last;
+        _Blockptr& _End   = _My_data._End;
+
+        if (_Begin == _First && _Last == _End) {
+            return;
+        } else if (_First == _Last) {
+            _Tidy();
+            return;
+        }
+
+        _Alblock _BlockAl(_Getal());
+        const auto _Old_num_blocks = _End - _Begin;
+        const auto _Num_blocks     = _Last - _First;
+        const auto _New_array      = _BlockAl.allocate(_Num_blocks);
+
+        for (auto _Current = _Begin; _Current != _First; ++_Current) {
+            _Al.deallocate(_Current->_Begin, static_cast<size_t>(_Deque_block_size));
+        }
+
+        _Uninitialized_move(_First, _Last, _New_array, _BlockAl);
+
+        for (auto _Current = _Last; _Current != _End; ++_Current) {
+            _Al.deallocate(_Current->_Begin, static_cast<size_t>(_Deque_block_size));
+        }
+
+        _Destroy_range(_Begin, _End, _BlockAl);
+        _BlockAl.deallocate(_Begin, _Old_num_blocks);
+
+        _Begin = _New_array;
+        _First = _New_array;
+        _Last  = _New_array + _Num_blocks;
+        _End   = _New_array + _Num_blocks;
+    }
+
+    _CONSTEXPR23_CONTAINER void swap(deque2& _Right) noexcept /* strengthened */ {
+        if (this != _STD addressof(_Right)) {
+            _Pocs(_Getal(), _Right._Getal());
+            _Mypair._Myval2._Swap_val(_Right._Mypair._Myval2);
+        }
+    }
+
+    // deque2.comparison
+    _NODISCARD friend _CONSTEXPR23_CONTAINER bool operator==(const deque2& _Left, const deque2& _Right) {
+        return _Left.size() == _Right.size()
+            && _STD equal(_Left._Unchecked_begin(), _Left._Unchecked_end(), _Right._Unchecked_begin());
+    }
+
+#if !_HAS_CXX20
+    _NODISCARD friend bool operator!=(const deque2& _Left, const deque2& _Right) {
+        return !(_Left == _Right);
+    }
+#endif // !_HAS_CXX20
+
+#ifdef __cpp_lib_concepts
+    _NODISCARD friend _CONSTEXPR23_CONTAINER _Synth_three_way_result<_Ty> operator<=>(
+        const deque2& _Left, const deque2& _Right) {
+        return _STD lexicographical_compare_three_way(_Left._Unchecked_begin(), _Left._Unchecked_end(),
+            _Right._Unchecked_begin(), _Right._Unchecked_end(), _Synth_three_way{});
+    }
+#else // ^^^ defined(__cpp_lib_concepts) / !defined(__cpp_lib_concepts) vvv
+    _NODISCARD friend bool operator<(const deque2& _Left, const deque2& _Right) {
+        return _STD lexicographical_compare(
+            _Left._Unchecked_begin(), _Left._Unchecked_end(), _Right._Unchecked_begin(), _Right._Unchecked_end());
+    }
+
+    _NODISCARD friend bool operator<=(const deque2& _Left, const deque2& _Right) {
+        return !(_Right < _Left);
+    }
+
+    _NODISCARD friend bool operator>(const deque2& _Left, const deque2& _Right) {
+        return _Right < _Left;
+    }
+
+    _NODISCARD friend bool operator>=(const deque2& _Left, const deque2& _Right) {
+        return !(_Left < _Right);
+    }
+#endif // ^^^ !defined(__cpp_lib_concepts) ^^^
+
+private:
+    _NODISCARD constexpr auto _To_iter(const size_type _Off) noexcept {
+        const auto _Hole    = _Mypair._Myval2._First->_First - _Mypair._Myval2._First->_Begin;
+        const auto _Block   = _Mypair._Myval2._First + (_Off + _Hole) / _Deque_block_size;
+        const auto _Current = (_Off + _Hole) % _Deque_block_size;
+        return _Unchecked_iterator{_Block, _Block->_Begin + _Current};
+    }
+
+    _NODISCARD constexpr auto _To_iter(const size_type _Off) const noexcept {
+        const auto _Hole    = _Mypair._Myval2._First->_First - _Mypair._Myval2._First->_Begin;
+        const auto _Block   = _Mypair._Myval2._First + (_Off + _Hole) / _Deque_block_size;
+        const auto _Current = (_Off + _Hole) % _Deque_block_size;
+        return _Unchecked_const_iterator{_Block, _Block->_Begin + _Current};
+    }
+
+    _NODISCARD constexpr size_type _To_position(const _Unchecked_const_iterator _Where) noexcept {
+        const auto _Hole       = _Mypair._Myval2._First->_First - _Mypair._Myval2._First->_Begin;
+        const auto _Blocks     = _Where._Block - _Mypair._Myval2._First;
+        const auto _Block_size = _Where._Current - _Where._Block->_First;
+        return static_cast<size_type>(_Blocks * _Deque_block_size + _Block_size - _Hole);
+    }
+
+    template <_Deque_strat _Strat, class _Iter>
+    _NODISCARD _CONSTEXPR23_CONTAINER _Iter _Block_construct(
+        const _Blockptr _Block, _Iter _IFirst, _Iter _ILast, const difference_type _End_index = _Deque_block_size) {
+        _STL_INTERNAL_CHECK(_IFirst != _ILast);
+
+        // We start at the uninitialized memory at _Block->_Last
+        auto _Block_first      = _Block->_Last;
+        const auto _Block_last = _Block->_Begin + _End_index;
+
+        _Uninitialized_backout_al<_Alloc> _Backout{_Block_first, _Getal()};
+        for (; _Block_first != _Block_last && _IFirst != _ILast; ++_Block_first, (void) ++_IFirst) {
+            if constexpr (_Strat == _Deque_strat::_Copy || _Strat == _Deque_strat::_Fill) {
+                _Backout._Emplace_back(*_IFirst);
+            } else if constexpr (_Strat == _Deque_strat::_Move) {
+                _Backout._Emplace_back(_STD move(*_IFirst));
+            } else if constexpr (_Strat == _Deque_strat::_Construct) {
+                _Backout._Emplace_back();
+            } else {
+                static_assert(_Always_false<_Strat>, "Invalid strategy passed to _Block_construct");
+            }
+        }
+        _Block->_Last = _Block_first;
+
+        _Backout._Release();
+        return _IFirst;
+    }
+
+    template <_Deque_strat _Strat, bool _Erase_after_range, class _Iter>
+    _NODISCARD _CONSTEXPR23_CONTAINER _Iter _Block_assign(const _Blockptr _Block, _Iter _IFirst, _Iter _ILast) {
+        _STL_INTERNAL_CHECK(_IFirst != _ILast);
+        for (auto _Current = _Block->_First; _Current != _Block->_Last; ++_Current, (void) ++_IFirst) {
+            if (_IFirst == _ILast) {
+                if constexpr (_Erase_after_range) {
+                    _Erase_after(_Block, _Current);
+                }
+
+                return _IFirst;
+            }
+
+            if constexpr (_Strat == _Deque_strat::_Copy || _Strat == _Deque_strat::_Fill) {
+                *_Current = *_IFirst;
+            } else if constexpr (_Strat == _Deque_strat::_Move) {
+                *_Current = _STD move(*_IFirst);
+            } else {
+                static_assert(_Always_false<_Strat>, "Invalid strategy passed to _Block_assign");
+            }
+        }
+
+        return _IFirst;
+    }
+
+    template <_Deque_strat _Strat, class _Iter>
+    _CONSTEXPR23_CONTAINER void _Construct_blocks(_Blockptr _Dest, _Iter _IFirst, _Iter _ILast) {
+        // Constructs new blocks from the range [_IFirst, _ILast). The caller is required to allocate the blocks on case
+        // of forward iterators
+        auto& _My_data = _Mypair._Myval2;
+        if (_Dest != _My_data._Last) { // Partial final block
+            _IFirst = _Block_construct<_Strat>(_Dest, _STD move(_IFirst), _ILast);
+            ++_Dest;
+        }
+
+        _STL_INTERNAL_CHECK(_Dest == _My_data._Last);
+        while (_IFirst != _ILast) {
+            if constexpr (!_Is_fwd_iter_v<_Iter>) {
+                _Grow_blocks_right(1);
+            }
+
+            _IFirst = _Block_construct<_Strat>(_My_data._Last, _STD move(_IFirst), _ILast);
+            ++_My_data._Last;
+        }
+    }
+
+    template <_Deque_strat _Strat, bool _Erase_after_range, class _Iter>
+    _NODISCARD _CONSTEXPR23_CONTAINER _Iter _Assign_blocks(_Blockptr _Dest, _Iter _IFirst, _Iter _ILast) {
+        // Assigns the range [_IFirst, _ILast) into blocks beginning at _Dest
+        auto& _My_data = _Mypair._Myval2;
+        while (_Dest != _My_data._Last && _IFirst != _ILast) {
+            _IFirst = _Block_assign<_Strat, _Erase_after_range>(_Dest, _STD move(_IFirst), _ILast);
+            ++_Dest;
+        }
+
+        return _IFirst;
+    }
+
+    template <_Deque_strat _Strat, class _Iter>
+    _CONSTEXPR23_CONTAINER void _Construct_range(_Iter _IFirst, _Iter _ILast) {
+        if (_IFirst == _ILast) {
+            return;
+        }
+
+        _Tidy_guard<deque2> _Guard{this};
+        auto& _My_data = _Mypair._Myval2;
+        if constexpr (_Is_fwd_iter_v<_Iter>) {
+            const auto _Count         = _Convert_size<size_type>(static_cast<size_t>(_STD distance(_IFirst, _ILast)));
+            const auto _Partial_slots = _Count % _Deque_block_size;
+            const auto _Num_blocks    = _Count / _Deque_block_size + (_Partial_slots == 0 ? 0 : 1);
+            _Grow_blocks_right(_Num_blocks);
+
+            // Balance the allocated elements so that we have equal space at front and back
+            const auto _Off        = _Partial_slots == 0 ? 0 : (_Deque_block_size - _Partial_slots) / 2;
+            _My_data._Last->_First = _My_data._Last->_Begin + _Off;
+            _My_data._Last->_Last  = _My_data._Last->_First;
+        }
+
+        _Construct_blocks<_Strat>(_My_data._Last, _STD move(_IFirst), _STD move(_ILast));
+        _Guard._Target = nullptr;
+    }
+
+    template <_Deque_strat _Strat, class _Iter>
+    _CONSTEXPR23_CONTAINER void _Assign_range(_Iter _IFirst, _Iter _ILast) {
+        auto& _My_data = _Mypair._Myval2;
+        _My_data._Orphan_all();
+
+        if (_IFirst == _ILast) {
+            _Erase_after(_My_data._First, _My_data._First ? _My_data._First->_First : nullptr);
+            return;
+        }
+
+        auto& _Al         = _Getal();
+        _Blockptr& _First = _My_data._First;
+        _Blockptr& _Last  = _My_data._Last;
+
+        // Special treatment for first block
+        pointer _New_first = nullptr;
+        if constexpr (_Is_fwd_iter_v<_Iter>) {
+            const auto _Count      = _Convert_size<size_type>(static_cast<size_t>(_STD distance(_IFirst, _ILast)));
+            const auto _Free_slots = _Grow_right(_Count);
+            const auto _Off        = (_Free_slots == 0 ? 0 : _Deque_block_size - _Free_slots) / 2;
+
+            // Balance the allocated elements so that we have equal space at front and back
+            _New_first = _My_data._First->_Begin + _Off;
+            if (_New_first > _First->_Last) {
+                _Destroy_range(_First->_First, _First->_Last, _Al);
+                _First->_First = _New_first;
+                _First->_Last  = _New_first;
+            } else if (_New_first > _First->_First) {
+                _Destroy_range(_First->_First, _New_first, _Al);
+                _First->_First = _New_first;
+            }
+        } else {
+            if (_Mypair._Myval2._Begin == nullptr) {
+                _Grow_blocks_right(1);
+            }
+            _New_first = _My_data._First->_Begin;
+        }
+
+        if (_New_first < _First->_First) {
+            // _Block_construct works on [_Last, _Final_index)
+            const auto _Old_last = _STD exchange(_First->_Last, _New_first);
+            _TRY_BEGIN
+            _IFirst = _Block_construct<_Strat>(_First, _IFirst, _ILast, _First->_First - _First->_Begin);
+            if (_IFirst == _ILast) {
+                // _Erase_after works on [_First, _Last) but we are still before it
+                const auto _New_last = _STD exchange(_First->_Last, _Old_last);
+                _Erase_after(_First, _First->_First);
+                _First->_First = _New_first;
+                _First->_Last  = _New_last;
+                return;
+            }
+            // We do not set _First yet, as we can reuse it when overwriting existing elements below
+            _First->_Last = _Old_last;
+            _CATCH_ALL
+            _First->_Last = _Old_last;
+            _RERAISE;
+            _CATCH_END
+        }
+
+        _TRY_BEGIN
+        _IFirst        = _Assign_blocks<_Strat, true>(_First, _STD move(_IFirst), _ILast);
+        _First->_First = _New_first;
+        _CATCH_ALL
+        _First->_First = _New_first;
+        _RERAISE;
+        _CATCH_END
+
+        if (_IFirst != _ILast) {
+            const auto _Current = _First != _Last ? _Last - 1 : _Last;
+            _Construct_blocks<_Strat>(_Current, _STD move(_IFirst), _STD move(_ILast));
+        }
+    }
+
+    template <_Deque_strat _Strat, class _Iter>
+    _CONSTEXPR23_CONTAINER iterator _Append_back(_Iter _IFirst, _Iter _ILast) {
+        if (_IFirst == _ILast) {
+            return end();
+        }
+
+        if constexpr (_Is_fwd_iter_v<_Iter>) {
+            auto& _My_data         = _Mypair._Myval2;
+            _Blockptr& _First      = _My_data._First;
+            const auto _Free_slots = _First == _My_data._Last ? 0 : (_First->_First - _First->_Begin);
+            const auto _Count =
+                _Convert_size<size_type>(static_cast<size_t>(_STD distance(_IFirst, _ILast) - _Free_slots));
+            const auto _Newblocks = _Count / _Deque_block_size + (_Count % _Deque_block_size == 0 ? 0 : 1);
+            _Grow_blocks_right(_Newblocks);
+
+            const auto _Result = _Unchecked_end();
+            _Construct_blocks<_Strat>(_Result._Block, _STD move(_IFirst), _STD move(_ILast));
+            return iterator{_Result._Block, _Result._Current, _STD addressof(_My_data)};
+        } else {
+            const auto _Old_size = size(); // We need to use the size as we are growing inside _Construct_blocks
+            _Construct_blocks<_Strat>(_Unchecked_end()._Block, _STD move(_IFirst), _STD move(_ILast));
+            return begin() + size();
+        }
+    }
+
+    template <_Deque_strat _Strat, class _Iter>
+    _NODISCARD _CONSTEXPR23_CONTAINER iterator _Append_front(_Iter _IFirst, _Iter _ILast) {
+        if (_IFirst == _ILast) {
+            return begin();
+        }
+
+        auto& _My_data = _Mypair._Myval2;
+        if constexpr (_Is_fwd_iter_v<_Iter>) {
+            _Blockptr& _First      = _My_data._First;
+            const auto _Free_slots = _First == _My_data._Last ? 0 : (_First->_First - _First->_Begin);
+            const auto _Count =
+                _Convert_size<size_type>(static_cast<size_t>(_STD distance(_IFirst, _ILast) - _Free_slots));
+            const auto _Newblocks = _Count / _Deque_block_size + (_Count % _Deque_block_size == 0 ? 0 : 1);
+            _Grow_blocks_left(_Newblocks);
+
+            // We fake that this is an empty deque that we construct
+            const auto _Result        = _Unchecked_begin();
+            const auto _New_first     = _Result - _Count;
+            _New_first._Block->_First = _New_first._Current;
+            _New_first._Block->_Last  = _New_first._Current;
+            const auto _Old_last      = _STD exchange(_My_data._Last, _New_first._Block);
+
+            _TRY_BEGIN
+            _Construct_blocks<_Strat>(_New_first, _STD move(_IFirst), _STD move(_ILast));
+            _My_data._Last = _Old_last;
+            _CATCH_ALL
+            _My_data._Last = _Old_last;
+            _RERAISE;
+            _CATCH_END
+
+            _My_data._First = _New_first._Block;
+            return iterator{_Result._Block, _Result._Current, _STD addressof(_My_data)};
+        } else {
+            const auto _Old_size = size(); // We need to use the size as we are growing inside _Construct_blocks
+            _Construct_blocks<_Strat>(_Unchecked_end()._Block, _STD move(_IFirst), _STD move(_ILast));
+
+            // TRANSITION Build specialized rotate
+            const auto _Result = _STD rotate(_Unchecked_begin(), _Unchecked_begin() + _Old_size, _Unchecked_end());
+            return iterator{_Result._Block, _Result._Current, _STD addressof(_My_data)};
+        }
+    }
+
+    template <class _Iter>
+    _CONSTEXPR23_CONTAINER iterator _Insert_at(const _Unchecked_iterator _UWhere, _Iter _IFirst, _Iter _ILast) {
+        auto& _My_data = _Mypair._Myval2;
+        if (_IFirst == _ILast) {
+            return iterator{_UWhere._Block, _UWhere._Current, _STD addressof(_My_data)};
+        }
+
+        if constexpr (_Is_fwd_iter_v<_Iter>) {
+            _Blockptr& _First      = _My_data._First;
+            const auto _Free_slots = _First == _My_data._Last ? 0 : (_First->_First - _First->_Begin);
+            const auto _Count =
+                _Convert_size<size_type>(static_cast<size_t>(_STD distance(_IFirst, _ILast) - _Free_slots));
+            const auto _Newblocks = _Count / _Deque_block_size + (_Count % _Deque_block_size == 0 ? 0 : 1);
+            _Grow_blocks_right(_Newblocks);
+
+            const auto _Result = _Unchecked_end();
+            _Construct_blocks<_Deque_strat::_Copy>(_Result._Block, _STD move(_IFirst), _STD move(_ILast));
+            return iterator{_Result._Block, _Result._Current, _STD addressof(_My_data)};
+        } else {
+            const auto _Old_size   = size(); // We need to use the size as we are growing inside _Construct_blocks
+            const auto _Insert_pos = _To_position(_UWhere);
+            _Construct_blocks<_Deque_strat::_Copy>(_Unchecked_end()._Block, _STD move(_IFirst), _STD move(_ILast));
+
+            // TRANSITION Build specialized rotate
+            const auto _Result = _STD rotate(_To_iter(_Insert_pos), _To_iter(_Old_size), _Unchecked_end());
+            return iterator{_Result._Block, _Result._Current, _STD addressof(_My_data)};
+        }
+    }
+
+    enum class _Modifier_strategy : uint8_t {
+        _At_front,
+        _Shift_to_front,
+        _Shift_to_back,
+        _At_back,
+    };
+
+    _NODISCARD constexpr _Modifier_strategy _Choose_strategy(
+        const _Unchecked_iterator _Left, const _Unchecked_iterator _Right) noexcept {
+        const auto _UBegin = _Unchecked_begin();
+        const auto _UEnd   = _Unchecked_end();
+        if (_Right == _UEnd) {
+            return _Modifier_strategy::_At_back;
+        } else if (_Left == _UBegin) {
+            return _Modifier_strategy::_At_front;
+        } else if (_Left - _UBegin < _UEnd - _Right) {
+            return _Modifier_strategy::_Shift_to_back;
+        } else {
+            return _Modifier_strategy::_Shift_to_front;
+        }
+    }
+
+    _CONSTEXPR23_CONTAINER void _Buy_raw(const size_type _Newcapacity) {
+        // allocate array with _Newcapacity elements
+        _Alty& _Al = _Getal();
+        _Alblock _BlockAl(_Getal());
+        auto& _My_data    = _Mypair._Myval2;
+        _Blockptr& _Begin = _My_data._Begin;
+        _Blockptr& _First = _My_data._First;
+        _Blockptr& _Last  = _My_data._Last;
+        _Blockptr& _End   = _My_data._End;
+
+        _STL_INTERNAL_CHECK(!_Begin && !_First && !_Last && !_End); // check that *this is tidy
+        _STL_INTERNAL_CHECK(_Newcapacity > 0);
+
+        const auto _Remaining_elements = _Newcapacity % _Deque_block_size;
+        const auto _Num_blocks         = _Newcapacity / _Deque_block_size + (_Remaining_elements == 0 ? 0 : 1);
+        const auto _New_array          = _BlockAl.allocate(_Num_blocks + 1); // Adding a sentinel block
+        _Begin                         = _New_array;
+        _First                         = _Begin;
+        _Last                          = _Begin;
+        _End                           = _New_array + _Num_blocks;
+
+        // Create the blocks
+        _Uninitialized_value_construct_n(_Begin, _Num_blocks + 1, _BlockAl);
+
+        // Allocate the blocks for the elements
+        auto _Current = _First;
+        _TRY_BEGIN
+        for (; _Current != _End; ++_Current) {
+            _Current->_Begin = _Al.allocate(static_cast<size_t>(_Deque_block_size));
+        }
+        _CATCH_ALL
+        --_Current;
+        for (; _Current != _First; --_Current) {
+            _Al.deallocate(_Current->_Begin, static_cast<size_t>(_Deque_block_size));
+        }
+        _BlockAl.deallocate(_Begin, _Num_blocks + 1);
+        _Begin = nullptr;
+        _First = nullptr;
+        _Last  = nullptr;
+        _End   = nullptr;
+        _RERAISE;
+        _CATCH_END
+    }
+
+    _CONSTEXPR23_CONTAINER size_type _Grow_right(const size_type _Newsize) {
+        if (_Newsize > max_size()) {
+            _Xlength();
+        }
+
+        _Alty& _Al = _Getal();
+        _Alblock _BlockAl(_Getal());
+        auto& _My_data    = _Mypair._Myval2;
+        _Blockptr& _Begin = _My_data._Begin;
+        _Blockptr& _First = _My_data._First;
+        _Blockptr& _Last  = _My_data._Last;
+        _Blockptr& _End   = _My_data._End;
+
+        const auto _Empty_blocks_left  = static_cast<size_type>(_First - _Begin);
+        const auto _Available_blocks   = static_cast<size_type>(_End - _First);
+        const auto _Remaining_elements = static_cast<size_type>(_Newsize % _Deque_block_size);
+        const auto _Num_blocks =
+            static_cast<size_type>(_Newsize / _Deque_block_size + (_Remaining_elements == 0 ? 0 : 1));
+        if (_Num_blocks <= _Available_blocks) {
+            return _Remaining_elements; // Sufficient space, just return
+        }
+
+        _My_data._Orphan_all();
+        if (_Num_blocks <= _Available_blocks + _Empty_blocks_left) {
+            const auto _Diff = _Available_blocks + _Empty_blocks_left - _Num_blocks;
+            _First           = _STD rotate(_First - _Diff, _First, _Last);
+            _Last -= _Diff;
+            return _Remaining_elements;
+        }
+
+        const auto _New_array = _BlockAl.allocate(_Num_blocks + 1); // Adding a sentinel block
+        auto _New_last        = _New_array + _Available_blocks;
+        auto _New_end         = _New_array + _Num_blocks;
+
+        // Create the blocks, it is simpler to always construct the trivial sentinel rather than to handle the special
+        // logic to move it
+        _Uninitialized_value_construct_n(_New_last, _Num_blocks - _Available_blocks + 1, _BlockAl);
+
+        // Allocate the new blocks for the elements
+        auto _Current = _New_last;
+        _TRY_BEGIN
+        for (; _Current != _New_end; ++_Current) {
+            _Current->_Begin = _Al.allocate(static_cast<size_t>(_Deque_block_size));
+            _Current->_First = _Current->_Begin;
+            _Current->_Last  = _Current->_Begin;
+        }
+        _CATCH_ALL
+        --_Current;
+        for (; _Current != _New_last; --_Current) {
+            _Al.deallocate(_Current->_Begin, static_cast<size_t>(_Deque_block_size));
+        }
+        _Destroy_range(_New_last, _New_end + 1, _BlockAl);
+        _BlockAl.deallocate(_New_last, _Num_blocks + 1); // Including sentinel
+        _RERAISE;
+        _CATCH_END
+
+        // Move over the old blocks, first the used ones then the unused before _First
+        if (_Begin) {
+            auto _Mid = _Uninitialized_move(_First, _End, _New_array, _BlockAl);
+            _Uninitialized_move(_Begin, _First, _Mid, _BlockAl);
+            _Destroy_range(_Begin, _End + 1, _BlockAl);
+            _BlockAl.deallocate(_Begin, static_cast<size_t>(_End - _Begin + 1));
+        }
+        _Begin = _New_array;
+        _First = _New_array;
+        _Last  = _New_last;
+        _End   = _New_end;
+        return _Remaining_elements;
+    }
+
+    _CONSTEXPR23_CONTAINER void _Grow_blocks_right(const size_type _New_blocks) {
+        _Alty& _Al = _Getal();
+        _Alblock _BlockAl(_Getal());
+        auto& _My_data    = _Mypair._Myval2;
+        _Blockptr& _Begin = _My_data._Begin;
+        _Blockptr& _First = _My_data._First;
+        _Blockptr& _Last  = _My_data._Last;
+        _Blockptr& _End   = _My_data._End;
+
+        const auto _Available_right_blocks = static_cast<size_type>(_End - _Last);
+        if (_New_blocks <= _Available_right_blocks) {
+            return;
+        }
+
+        _My_data._Orphan_all();
+        const auto _Available_left_blocks = static_cast<size_type>(_First - _Begin);
+        if (_New_blocks <= _Available_right_blocks + _Available_left_blocks) {
+            const auto _Diff = _Available_right_blocks + _Available_right_blocks - _New_blocks;
+            _First           = _STD rotate(_First - _Diff, _First, _Last);
+            _Last -= _Diff;
+            return;
+        }
+
+        const auto _Additional_blocks = _New_blocks - _Available_right_blocks - _Available_right_blocks;
+        const auto _Current_blocks    = static_cast<size_type>(_End - _Begin);
+        const auto _Total_blocks      = _Current_blocks + _Additional_blocks;
+        if (_Total_blocks * _Deque_block_size > max_size()) {
+            _Xlength();
+        }
+
+        const auto _New_array = _BlockAl.allocate(_Total_blocks + 1); // Including sentinel
+        auto _New_last        = _New_array + _Current_blocks;
+        const auto _New_end   = _New_array + _Total_blocks;
+
+        // Create the blocks
+        _Uninitialized_value_construct_n(_New_last, _Additional_blocks + 1, _BlockAl);
+
+        // Allocate the new blocks for the elements
+        auto _Current = _New_last;
+        _TRY_BEGIN
+        for (; _Current != _New_end; ++_Current) {
+            _Current->_Begin = _Al.allocate(static_cast<size_t>(_Deque_block_size));
+            _Current->_First = _Current->_Begin;
+            _Current->_Last  = _Current->_Begin;
+        }
+        _CATCH_ALL
+        --_Current;
+        for (; _Current != _New_last; --_Current) {
+            _Al.deallocate(_Current->_Begin, static_cast<size_t>(_Deque_block_size));
+        }
+        _Destroy_range(_New_last, _New_end + 1, _BlockAl);
+        _BlockAl.deallocate(_New_array, _Total_blocks + 1); // Including sentinel
+        _RERAISE;
+        _CATCH_END
+
+        if (_Begin) { // Move over the old blocks, first the used ones then the unused before _First
+            const auto _Mid = _Uninitialized_move(_First, _End, _New_array, _BlockAl);
+            _Uninitialized_move(_Begin, _First, _Mid, _BlockAl);
+            _Destroy_range(_Begin, _End + 1, _BlockAl);
+            _BlockAl.deallocate(_Begin, _Current_blocks + 1);
+        }
+
+        _Begin = _New_array;
+        _First = _New_array;
+        _Last  = _New_last;
+        _End   = _New_end;
+    }
+
+    _CONSTEXPR23_CONTAINER void _Grow_blocks_left(const size_type _New_blocks) {
+        _Alty& _Al = _Getal();
+        _Alblock _BlockAl(_Getal());
+        auto& _My_data    = _Mypair._Myval2;
+        _Blockptr& _Begin = _My_data._Begin;
+        _Blockptr& _First = _My_data._First;
+        _Blockptr& _Last  = _My_data._Last;
+        _Blockptr& _End   = _My_data._End;
+
+        const auto _Available_left_blocks = static_cast<size_type>(_First - _Begin);
+        if (_New_blocks <= _Available_left_blocks) {
+            return;
+        }
+        _My_data._Orphan_all();
+
+        const auto _Available_right_blocks = static_cast<size_type>(_End - _Last);
+        if (_New_blocks <= _Available_right_blocks + _Available_left_blocks) {
+            const auto _Diff = _Available_right_blocks + _Available_right_blocks - _New_blocks;
+            _First           = _STD rotate(_First, _Last, _Last + _Diff);
+            _Last += _Diff;
+            return;
+        }
+
+        const auto _Additional_blocks = _New_blocks - _Available_right_blocks - _Available_right_blocks;
+        const auto _Current_blocks    = static_cast<size_type>(_End - _Begin);
+        const auto _Total_blocks      = _Current_blocks + _Additional_blocks;
+        if (_Total_blocks * _Deque_block_size > max_size()) {
+            _Xlength();
+        }
+
+        const auto _New_array = _BlockAl.allocate(_Total_blocks + 1); // including sentinel
+        auto _Mid             = _New_array + _Additional_blocks;
+
+        // Create the blocks
+        _Uninitialized_value_construct_n(_New_array, _Additional_blocks, _BlockAl);
+        _Uninitialized_value_construct_n(_New_array + _Total_blocks, 1, _BlockAl);
+
+        // Allocate the new blocks for the elements
+        auto _Current = _New_array;
+        _TRY_BEGIN
+        for (; _Current != _Mid; ++_Current) {
+            _Current->_Begin = _Al.allocate(static_cast<size_t>(_Deque_block_size));
+            _Current->_First = _Current->_Begin;
+            _Current->_Last  = _Current->_Begin;
+        }
+        _CATCH_ALL
+        --_Current;
+        for (; _Current != _New_array; --_Current) {
+            _Al.deallocate(_Current->_Begin, static_cast<size_t>(_Deque_block_size));
+        }
+        _Destroy_range(_New_array, _Mid, _BlockAl);
+        _BlockAl.deallocate(_New_array, _Total_blocks);
+        _RERAISE;
+        _CATCH_END
+
+        if (_Begin) { // Move over the old blocks, first the unused ones then the used ones
+            _Mid = _Uninitialized_move(_Last, _End, _Mid, _BlockAl);
+            _Uninitialized_move(_Begin, _Last, _Mid, _BlockAl);
+            _Destroy_range(_Begin, _End + 1, _BlockAl);
+            _BlockAl.deallocate(_Begin, _Current_blocks + 1);
+        }
+
+        _Begin = _New_array;
+        _First = _Mid + _Available_left_blocks;
+        _Last  = _New_array + _Total_blocks;
+        _End   = _New_array + _Total_blocks;
+    }
+
+    _CONSTEXPR23_CONTAINER void _Erase_after(_Blockptr _Block, const pointer _New_last) noexcept {
+        // Destroy all elements beginning from _Current
+        _Alty& _Al       = _Getal();
+        auto& _My_data   = _Mypair._Myval2;
+        _Blockptr& _Last = _My_data._Last;
+
+        if (!_Block) { // Guard against operations on empty deques
+            return;
+        }
+
+        for (auto _Current = _Block + 1; _Current != _Last; ++_Current) {
+            _Destroy_range(_Current->_First, _Current->_Last, _Al);
+            _Current->_First = _Current->_Begin;
+            _Current->_Last  = _Current->_Begin;
+        }
+
+        _Destroy_range(_New_last, _Block->_Last, _Al);
+        if (_New_last == _Block->_First) { // We fully emptied the block
+            _Block->_First = _Block->_Begin;
+            _Block->_Last  = _Block->_Begin;
+            _Last          = _Block;
+        } else {
+            _Block->_Last = _New_last;
+            _Last         = _Block + 1;
+        }
+    }
+
+    _CONSTEXPR23_CONTAINER void _Erase_until(_Blockptr _Block, const pointer _New_first) noexcept {
+        // Destroy all elements beginning from _Current
+        _Alty& _Al        = _Getal();
+        auto& _My_data    = _Mypair._Myval2;
+        _Blockptr& _First = _My_data._First;
+
+        if (!_Block) { // Guard against operations on empty deques
+            return;
+        }
+
+        for (auto _Current = _First; _Current != _Block; ++_Current) {
+            _Destroy_range(_Current->_First, _Current->_Last, _Al);
+            _Current->_First = _Current->_Begin;
+            _Current->_Last  = _Current->_Begin;
+        }
+
+        _Destroy_range(_Block->_First, _New_first, _Al);
+        if (_New_first == _Block->_Last) { // We fully emptied the block
+            _Block->_First = _Block->_Begin;
+            _Block->_Last  = _Block->_Begin;
+            _First         = _Block + 1;
+        } else {
+            _Block->_First = _New_first;
+            _First         = _Block;
+        }
+    }
+
+    _CONSTEXPR23_CONTAINER iterator _Erase_shift_to_back(
+        _Unchecked_iterator _Left, _Unchecked_iterator _Right) noexcept(is_nothrow_move_assignable_v<_Ty>) {
+        // Clear the elements in [_Left, _Right)
+        _STL_INTERNAL_CHECK(_Left != _Right);
+        _STL_INTERNAL_CHECK(_Left != _Unchecked_begin());
+
+        auto& _My_data          = _Mypair._Myval2;
+        const auto _Left_start  = _Left._Current - _Left._Block->_Begin;
+        const auto _Right_start = _Right._Current - _Right._Block->_Begin;
+        if (_Left_start == _Right_start) { // We can simply move the elements from _Right to _Left and swap blocks
+            const auto _Partial_left_block = _Left._Block->_First != _Left._Block->_Begin;
+            if (_Partial_left_block) {
+                const auto _New_first = _Move_backward_unchecked(_Left._Block->_First, _Left._Current, _Right._Current);
+                _Erase_until(_Right._Block, _New_first);
+            } else {
+                _Move_unchecked(_Left._Block->_First, _Left._Current, _Right._Block->_First);
+                const auto _Mid = _STD rotate(_My_data._First, _Left._Block + 1, _Right._Block);
+                _Erase_until(_Mid, _Mid->_Last);
+            }
+            return iterator{_Right._Block, _Right._Current, _STD addressof(_My_data)};
+        }
+
+        // TRANSITION: implement two-step dance
+        const auto _New_first = _STD _Move_backward_unchecked(_Unchecked_begin(), _Left, _Right);
+        _Erase_until(_New_first._Block, _New_first._Current);
+        return iterator{_Right._Block, _Right._Current, _STD addressof(_My_data)};
+    }
+
+    _CONSTEXPR23_CONTAINER iterator _Erase_shift_to_front(
+        _Unchecked_iterator _Left, _Unchecked_iterator _Right) noexcept(is_nothrow_move_assignable_v<_Ty>) {
+        // Clear the elements in [_Left, _Right)
+        _STL_INTERNAL_CHECK(_Left != _Right);
+        _STL_INTERNAL_CHECK(_Right != _Unchecked_end());
+
+        auto& _My_data        = _Mypair._Myval2;
+        const auto _Left_off  = _Left._Current - _Left._Block->_Begin;
+        const auto _Right_off = _Right._Current - _Right._Block->_Begin;
+        if (_Left_off == _Right_off) { // Move the elements from _Right._Block to _Left._Block and rotate blocks
+            const auto _Partial_right_block = _Right._Block->_Last != _Right._Block->_Begin + _Deque_block_size;
+            if (_Partial_right_block) { // We need to check whether we can actually fill _Left up
+                const auto _New_last = _Move_unchecked(_Right._Current, _Right._Block->_Last, _Left._Current);
+                _Erase_after(_Left._Block, _New_last);
+            } else {
+                _Move_unchecked(_Right._Current, _Right._Block->_Last, _Left._Current);
+                const auto _Mid = _STD rotate(_Left._Block + 1, _Right._Block + 1, _My_data._Last);
+                _Erase_after(_Mid, _Mid->_First);
+            }
+            return iterator{_Left._Block, _Left._Current, _STD addressof(_My_data)};
+        }
+
+        // TRANSITION: implement two-step dance
+        const auto _New_first = _STD _Move_unchecked(_Right, _Unchecked_end(), _Left);
+        _Erase_after(_New_first._Block, _New_first._Current);
+        return iterator{_Left._Block, _Left._Current, _STD addressof(_My_data)};
+    }
+
+    _CONSTEXPR23_CONTAINER void _Tidy() noexcept { // free all storage
+        _Alty& _Al = _Getal();
+        _Alblock _BlockAl(_Al);
+        auto& _My_data    = _Mypair._Myval2;
+        _Blockptr& _Begin = _My_data._Begin;
+        _Blockptr& _First = _My_data._First;
+        _Blockptr& _Last  = _My_data._Last;
+        _Blockptr& _End   = _My_data._End;
+
+        if (_Begin == nullptr) {
+            return;
+        }
+
+        _My_data._Orphan_all();
+        // Deallocate storage of unused blocks at front
+        auto _Current = _Begin;
+        for (; _Current != _First; ++_Current) {
+            _Al.deallocate(_Current->_Begin, static_cast<size_t>(_Deque_block_size));
+        }
+
+        for (; _Current != _Last; ++_Current) {
+            _Destroy_range(_Current->_First, _Current->_Last, _Al);
+            _Al.deallocate(_Current->_Begin, static_cast<size_t>(_Deque_block_size));
+        }
+        // Deallocate storage of unused blocks at back
+        for (; _Current != _End; ++_Current) {
+            _Al.deallocate(_Current->_Begin, static_cast<size_t>(_Deque_block_size));
+        }
+
+        _Destroy_range(_Begin, _End + 1, _BlockAl);
+        _BlockAl.deallocate(_Begin, static_cast<size_type>(_End - _Begin + 1));
+
+        _Begin = nullptr;
+        _First = nullptr;
+        _Last  = nullptr;
+        _End   = nullptr;
+    }
+
+    _NODISCARD constexpr _Alty& _Getal() noexcept {
+        return _Mypair._Get_first();
+    }
+
+    _NODISCARD constexpr const _Alty& _Getal() const noexcept {
+        return _Mypair._Get_first();
+    }
+
+    [[noreturn]] static void _Xlength() {
+        _Xlength_error("deque2 too long");
+    }
+
+    [[noreturn]] static void _Xrange() {
+        _Xout_of_range("invalid deque2 subscript");
+    }
+
+#if _ITERATOR_DEBUG_LEVEL != 0 && defined(_ENABLE_STL_INTERNAL_CHECK)
+    void _Check_all_orphaned_locked() const noexcept {
+        _Lockit _Lock(_LOCK_DEBUG);
+        auto& _My_data = _Mypair._Myval2;
+        _STL_INTERNAL_CHECK(!_My_data._Myproxy->_Myfirstiter);
+    }
+
+    _CONSTEXPR23_CONTAINER void _Check_all_orphaned() const noexcept {
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+        if (_STD is_constant_evaluated()) {
+            auto& _My_data = _Mypair._Myval2;
+            _STL_INTERNAL_CHECK(!_My_data._Myproxy->_Myfirstiter);
+        } else
+#endif // __cpp_lib_constexpr_dynamic_alloc
+        {
+            _Check_all_orphaned_locked();
+        }
+    }
+#endif // _ITERATOR_DEBUG_LEVEL != 0 && defined(_ENABLE_STL_INTERNAL_CHECK)
+
+#if _ITERATOR_DEBUG_LEVEL == 2
+    _CONSTEXPR23_CONTAINER void _Orphan_range_unlocked(
+        _Unchecked_const_iterator _First, _Unchecked_const_iterator _Final) const {
+        // orphan iterators within specified (inclusive) range
+        _Iterator_base12** _Pnext = &_Mypair._Myval2._Myproxy->_Myfirstiter;
+        while (*_Pnext) {
+            const auto& _Current = static_cast<_Unchecked_const_iterator&>(**_Pnext);
+            if (_Current < _First || _Final < _Current) { // skip the iterator
+                _Pnext = &(*_Pnext)->_Mynextiter;
+            } else { // orphan the iterator
+                (*_Pnext)->_Myproxy = nullptr;
+                *_Pnext             = (*_Pnext)->_Mynextiter;
+            }
+        }
+    }
+
+    void _Orphan_range_locked(_Unchecked_const_iterator _First, _Unchecked_const_iterator _Final) const {
+        _Lockit _Lock(_LOCK_DEBUG);
+        _Orphan_range_unlocked(_First, _Final);
+    }
+
+    _CONSTEXPR23_CONTAINER void _Orphan_range(
+        _Unchecked_const_iterator _First, _Unchecked_const_iterator _Final) const {
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+        if (_STD is_constant_evaluated()) {
+            _Orphan_range_unlocked(_First, _Final);
+        } else
+#endif // __cpp_lib_constexpr_dynamic_alloc
+        {
+            _Orphan_range_locked(_First, _Final);
+        }
+    }
+#else // ^^^ _ITERATOR_DEBUG_LEVEL == 2 ^^^ // vvv _ITERATOR_DEBUG_LEVEL != 2 vvv
+    _CONSTEXPR23_CONTAINER void _Orphan_range(_Unchecked_const_iterator, _Unchecked_const_iterator) const {}
+#endif // _ITERATOR_DEBUG_LEVEL == 2
+
+    _Compressed_pair<_Alty, _Scary_val> _Mypair;
+};
+
+#if _HAS_CXX17
+template <class _Iter, class _Alloc = allocator<_Iter_value_t<_Iter>>,
+    enable_if_t<conjunction_v<_Is_iterator<_Iter>, _Is_allocator<_Alloc>>, int> = 0>
+deque2(_Iter, _Iter, _Alloc = _Alloc()) -> deque2<_Iter_value_t<_Iter>, _Alloc>;
+#endif // _HAS_CXX17
+
+template <class _Ty, class _Alloc>
+_CONSTEXPR23_CONTAINER void swap(deque2<_Ty, _Alloc>& _Left, deque2<_Ty, _Alloc>& _Right) noexcept /* strengthened */ {
+    _Left.swap(_Right);
+}
+
+#if _HAS_CXX20
+template <class _Ty, class _Alloc, class _Uty>
+_CONSTEXPR23_CONTAINER typename deque2<_Ty, _Alloc>::size_type erase(deque2<_Ty, _Alloc>& _Cont, const _Uty& _Val) {
+    return _Erase_remove(_Cont, _Val);
+}
+
+template <class _Ty, class _Alloc, class _Pr>
+_CONSTEXPR23_CONTAINER typename deque2<_Ty, _Alloc>::size_type erase_if(deque2<_Ty, _Alloc>& _Cont, _Pr _Pred) {
+    return _Erase_remove_if(_Cont, _Pass_fn(_Pred));
+}
+#endif // _HAS_CXX20
+
+#if _HAS_CXX17
+namespace pmr {
+    template <class _Ty>
+    using deque2 = _STD deque2<_Ty, polymorphic_allocator<_Ty>>;
+} // namespace pmr
+#endif // _HAS_CXX17
+
+_STD_END
+
+#pragma pop_macro("new")
+_STL_RESTORE_CLANG_WARNINGS
+#pragma warning(pop)
+#pragma pack(pop)
+#endif // _STL_COMPILER_PREPROCESSOR
+#endif // _DEQUE2_

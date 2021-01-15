@@ -25,32 +25,33 @@ namespace std_testing {
         using iterator_category = std::input_iterator_tag;
         using my_iter           = const_unchecked_input_iterator;
 
-        explicit const_unchecked_input_iterator(const T* val) : m_val(const_cast<T*>(val)) {}
-        const_unchecked_input_iterator(const const_unchecked_input_iterator&) = default;
-        const_unchecked_input_iterator(const_unchecked_input_iterator&&)      = default;
-        const_unchecked_input_iterator& operator=(const const_unchecked_input_iterator&) = default;
-        const_unchecked_input_iterator& operator=(const_unchecked_input_iterator&&) = default;
+        _CONSTEXPR20_CONTAINER explicit const_unchecked_input_iterator(const T* val) : m_val(const_cast<T*>(val)) {}
+        _CONSTEXPR20_CONTAINER const_unchecked_input_iterator(const const_unchecked_input_iterator&) = default;
+        _CONSTEXPR20_CONTAINER const_unchecked_input_iterator(const_unchecked_input_iterator&&)      = default;
+        _CONSTEXPR20_CONTAINER const_unchecked_input_iterator& operator                              =(
+            const const_unchecked_input_iterator&) = default;
+        _CONSTEXPR20_CONTAINER const_unchecked_input_iterator& operator=(const_unchecked_input_iterator&&) = default;
 
-        reference operator*() const {
+        _CONSTEXPR20_CONTAINER reference operator*() const {
             return *m_val;
         }
 
-        pointer operator->() const {
+        _CONSTEXPR20_CONTAINER pointer operator->() const {
             return m_val;
         }
 
-        my_iter& operator++() {
+        _CONSTEXPR20_CONTAINER my_iter& operator++() {
             ++m_val;
             return *this;
         }
 
-        void operator++(int) = delete; // avoid postincrement
+        _CONSTEXPR20_CONTAINER void operator++(int) = delete; // avoid postincrement
 
-        bool operator==(const my_iter& right) const {
+        _CONSTEXPR20_CONTAINER bool operator==(const my_iter& right) const {
             return m_val == right.m_val;
         }
 
-        bool operator!=(const my_iter& right) const {
+        _CONSTEXPR20_CONTAINER bool operator!=(const my_iter& right) const {
             return !(*this == right);
         }
 
@@ -69,21 +70,21 @@ namespace std_testing {
         using iterator_category = std::input_iterator_tag;
         using my_iter           = unchecked_input_iterator;
 
-        explicit unchecked_input_iterator(T* val) : const_unchecked_input_iterator<T>(val) {}
-        unchecked_input_iterator(const unchecked_input_iterator&) = default;
-        unchecked_input_iterator(unchecked_input_iterator&&)      = default;
-        unchecked_input_iterator& operator=(const unchecked_input_iterator&) = default;
-        unchecked_input_iterator& operator=(unchecked_input_iterator&&) = default;
+        _CONSTEXPR20_CONTAINER explicit unchecked_input_iterator(T* val) : const_unchecked_input_iterator<T>(val) {}
+        _CONSTEXPR20_CONTAINER unchecked_input_iterator(const unchecked_input_iterator&) = default;
+        _CONSTEXPR20_CONTAINER unchecked_input_iterator(unchecked_input_iterator&&)      = default;
+        _CONSTEXPR20_CONTAINER unchecked_input_iterator& operator=(const unchecked_input_iterator&) = default;
+        _CONSTEXPR20_CONTAINER unchecked_input_iterator& operator=(unchecked_input_iterator&&) = default;
 
-        reference operator*() const {
+        _CONSTEXPR20_CONTAINER reference operator*() const {
             return *this->m_val;
         }
 
-        pointer operator->() const {
+        _CONSTEXPR20_CONTAINER pointer operator->() const {
             return this->m_val;
         }
 
-        my_iter& operator++() {
+        _CONSTEXPR20_CONTAINER my_iter& operator++() {
             ++this->m_val;
             return *this;
         }
@@ -100,23 +101,24 @@ namespace std_testing {
         using iterator_category = std::input_iterator_tag;
         using my_iter           = const_checked_input_iterator;
 
-        explicit const_checked_input_iterator(const T* val) : const_unchecked_input_iterator<T>(val) {}
-        const_checked_input_iterator(const const_checked_input_iterator&) = default;
-        const_checked_input_iterator(const_checked_input_iterator&&)      = default;
-        const_checked_input_iterator& operator=(const const_checked_input_iterator&) = default;
-        const_checked_input_iterator& operator=(const_checked_input_iterator&&) = default;
+        _CONSTEXPR20_CONTAINER explicit const_checked_input_iterator(const T* val)
+            : const_unchecked_input_iterator<T>(val) {}
+        _CONSTEXPR20_CONTAINER const_checked_input_iterator(const const_checked_input_iterator&) = default;
+        _CONSTEXPR20_CONTAINER const_checked_input_iterator(const_checked_input_iterator&&)      = default;
+        _CONSTEXPR20_CONTAINER const_checked_input_iterator& operator=(const const_checked_input_iterator&) = default;
+        _CONSTEXPR20_CONTAINER const_checked_input_iterator& operator=(const_checked_input_iterator&&) = default;
 
-        void _Seek_to(const_unchecked_input_iterator<T> right) {
+        _CONSTEXPR20_CONTAINER void _Seek_to(const_unchecked_input_iterator<T> right) {
             this->m_val = right.m_val;
         }
 
-        const_unchecked_input_iterator<T> _Unwrapped() const {
+        _CONSTEXPR20_CONTAINER const_unchecked_input_iterator<T> _Unwrapped() const {
             return const_unchecked_input_iterator<T>(this->m_val);
         }
 
         static constexpr bool _Unwrap_when_unverified = _ITERATOR_DEBUG_LEVEL == 0;
 
-        my_iter& operator++() {
+        _CONSTEXPR20_CONTAINER my_iter& operator++() {
             ++this->m_val;
             return *this;
         }
@@ -133,23 +135,23 @@ namespace std_testing {
         using iterator_category = std::input_iterator_tag;
         using my_iter           = checked_input_iterator;
 
-        explicit checked_input_iterator(T* val) : unchecked_input_iterator<T>(val) {}
-        checked_input_iterator(const checked_input_iterator&) = default;
-        checked_input_iterator(checked_input_iterator&&)      = default;
-        checked_input_iterator& operator=(const checked_input_iterator&) = default;
-        checked_input_iterator& operator=(checked_input_iterator&&) = default;
+        _CONSTEXPR20_CONTAINER explicit checked_input_iterator(T* val) : unchecked_input_iterator<T>(val) {}
+        _CONSTEXPR20_CONTAINER checked_input_iterator(const checked_input_iterator&) = default;
+        _CONSTEXPR20_CONTAINER checked_input_iterator(checked_input_iterator&&)      = default;
+        _CONSTEXPR20_CONTAINER checked_input_iterator& operator=(const checked_input_iterator&) = default;
+        _CONSTEXPR20_CONTAINER checked_input_iterator& operator=(checked_input_iterator&&) = default;
 
-        void _Seek_to(unchecked_input_iterator<T> right) {
+        _CONSTEXPR20_CONTAINER void _Seek_to(unchecked_input_iterator<T> right) {
             this->m_val = right.m_val;
         }
 
-        unchecked_input_iterator<T> _Unwrapped() const {
+        _CONSTEXPR20_CONTAINER unchecked_input_iterator<T> _Unwrapped() const {
             return unchecked_input_iterator<T>(this->m_val);
         }
 
         static constexpr bool _Unwrap_when_unverified = _ITERATOR_DEBUG_LEVEL == 0;
 
-        my_iter& operator++() {
+        _CONSTEXPR20_CONTAINER my_iter& operator++() {
             ++this->m_val;
             return *this;
         }
@@ -166,36 +168,36 @@ namespace std_testing {
         using iterator       = checked_input_iterator<T>;
         using const_iterator = const_checked_input_iterator<T>;
 
-        input_iterator_container() = default;
+        _CONSTEXPR20_CONTAINER input_iterator_container() = default;
 
         template <typename InIt>
-        input_iterator_container(InIt first, InIt last) : m_val(first, last) {}
+        _CONSTEXPR20_CONTAINER input_iterator_container(InIt first, InIt last) : m_val(first, last) {}
 
-        input_iterator_container(std::initializer_list<T> init_list)
+        _CONSTEXPR20_CONTAINER input_iterator_container(std::initializer_list<T> init_list)
             : input_iterator_container(init_list.begin(), init_list.end()) {}
 
-        input_iterator_container(const input_iterator_container&) = default;
-        input_iterator_container(input_iterator_container&&)      = default;
-        input_iterator_container& operator=(const input_iterator_container&) = default;
-        input_iterator_container& operator=(input_iterator_container&&) = default;
+        _CONSTEXPR20_CONTAINER input_iterator_container(const input_iterator_container&) = default;
+        _CONSTEXPR20_CONTAINER input_iterator_container(input_iterator_container&&)      = default;
+        _CONSTEXPR20_CONTAINER input_iterator_container& operator=(const input_iterator_container&) = default;
+        _CONSTEXPR20_CONTAINER input_iterator_container& operator=(input_iterator_container&&) = default;
 
-        const_iterator begin() const {
-            return const_iterator{reinterpret_cast<const T*>(m_val.data())};
+        _CONSTEXPR20_CONTAINER const_iterator begin() const {
+            return const_iterator{m_val._Unchecked_begin()};
         }
-        const_iterator end() const {
-            return const_iterator{reinterpret_cast<const T*>(m_val.data()) + m_val.size()};
+        _CONSTEXPR20_CONTAINER const_iterator end() const {
+            return const_iterator{m_val._Unchecked_end()};
         }
-        iterator begin() {
-            return iterator{reinterpret_cast<T*>(m_val.data())};
+        _CONSTEXPR20_CONTAINER iterator begin() {
+            return iterator{m_val._Unchecked_begin()};
         }
-        iterator end() {
-            return iterator{reinterpret_cast<T*>(m_val.data()) + m_val.size()};
+        _CONSTEXPR20_CONTAINER iterator end() {
+            return iterator{m_val._Unchecked_end()};
         }
 
-        const_iterator cbegin() const {
+        _CONSTEXPR20_CONTAINER const_iterator cbegin() const {
             return begin();
         }
-        const_iterator cend() const {
+        _CONSTEXPR20_CONTAINER const_iterator cend() const {
             return end();
         }
 

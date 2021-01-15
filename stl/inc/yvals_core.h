@@ -1382,6 +1382,13 @@
 #define _CONSTEXPR20_CONTAINER inline
 #endif
 
+// Functions that became constexpr in C++23
+#if defined(__cpp_lib_constexpr_dynamic_alloc) && !defined(__clang__) && _HAS_CXX23 // TRANSITION, LLVM-48606
+#define _CONSTEXPR23_CONTAINER constexpr
+#else
+#define _CONSTEXPR23_CONTAINER inline
+#endif
+
 #ifdef _RTC_CONVERSION_CHECKS_ENABLED
 #ifndef _ALLOW_RTCc_IN_STL
 #error /RTCc rejects conformant code, so it is not supported by the C++ Standard Library. Either remove this \

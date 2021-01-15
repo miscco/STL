@@ -1683,6 +1683,104 @@ private:
     _Alloc& _Al;
 };
 
+// CLASS TEMPLATE _Counted_insert_iterator
+template <class _Mycontainer>
+class _Counted_insert_iterator {
+public:
+#ifdef __cpp_lib_concepts
+    using iterator_concept = contiguous_iterator_tag;
+#endif // __cpp_lib_concepts
+    using iterator_category = random_access_iterator_tag;
+    using value_type        = typename _Mycontainer::value_type;
+    using size_type         = typename _Mycontainer::size_type;
+    using difference_type   = typename _Mycontainer::difference_type;
+    using pointer           = typename _Mycontainer::pointer;
+    using reference         = typename _Mycontainer::reference;
+
+    constexpr _Counted_insert_iterator() = default;
+    explicit constexpr _Counted_insert_iterator(const size_type _Count_) noexcept : _Count(_Count_) {}
+    explicit constexpr _Counted_insert_iterator(const size_type _Count_, const pointer _Val_) noexcept
+        : _Count(_Count_), _Val(_Val_) {}
+
+    _NODISCARD constexpr reference operator*() const noexcept {
+        return *_Val;
+    }
+
+    _NODISCARD constexpr pointer operator->() const noexcept {
+        return _Val;
+    }
+
+    constexpr _Counted_insert_iterator& operator++() noexcept {
+        --_Count;
+        return *this;
+    }
+
+    constexpr _Counted_insert_iterator operator++(int) noexcept {
+        _Counted_insert_iterator _Tmp{*this};
+        ++*this;
+        return _Tmp;
+    }
+
+    constexpr _Counted_insert_iterator& operator--() noexcept {
+        ++_Count;
+        return *this;
+    }
+
+    constexpr _Counted_insert_iterator operator--(int) noexcept {
+        _Counted_insert_iterator _Tmp{*this};
+        --*this;
+        return _Tmp;
+    }
+
+    constexpr _Counted_insert_iterator& operator+=(const difference_type _Off) noexcept {
+        _Count -= _Off;
+        return *this;
+    }
+
+    _NODISCARD constexpr _Counted_insert_iterator operator+(const difference_type _Off) const noexcept {
+        _Counted_insert_iterator _Tmp{*this};
+        _Tmp += _Off;
+        return _Tmp;
+    }
+
+    _NODISCARD friend constexpr _Counted_insert_iterator operator+(
+        const difference_type _Off, _Counted_insert_iterator _Next) noexcept {
+        return _Next += _Off;
+    }
+
+    constexpr _Counted_insert_iterator& operator-=(const difference_type _Off) noexcept {
+        _Count -= _Off;
+        return *this;
+    }
+
+    _NODISCARD constexpr _Counted_insert_iterator operator-(const difference_type _Off) const noexcept {
+        _Counted_insert_iterator _Tmp{*this};
+        _Tmp -= _Off;
+        return _Tmp;
+    }
+
+    _NODISCARD constexpr difference_type operator-(const _Counted_insert_iterator& _Right) const noexcept {
+        return static_cast<difference_type>(_Right._Count - _Count);
+    }
+
+    _NODISCARD constexpr reference operator[](const difference_type) const noexcept {
+        return *_Val;
+    }
+
+    _NODISCARD constexpr bool operator==(const _Counted_insert_iterator& _Right) const noexcept {
+        return _Count == _Right._Count;
+    }
+
+#if !_HAS_CXX20
+    _NODISCARD constexpr bool operator!=(const _Counted_insert_iterator& _Right) const noexcept {
+        return _Count != _Right._Count;
+    }
+#endif // !_HAS_CXX20
+
+    size_type _Count = 0;
+    pointer _Val     = pointer{};
+};
+
 // FUNCTION TEMPLATE _Uninitialized_copy WITH ALLOCATOR
 template <class _InIt, class _Alloc>
 _CONSTEXPR20_DYNALLOC _Alloc_ptr_t<_Alloc> _Uninitialized_copy(
