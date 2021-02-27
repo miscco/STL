@@ -215,8 +215,8 @@ struct memcpy_test {
         }
 
         { // Validate input shorter
-            int input[]  = {13, 55, 12345};
-            int output[] = {-1, -1, -1, -1};
+            int input[] = {13, 55, 12345};
+            int output[4];
 
             auto result = ranges::uninitialized_copy(input, output);
             assert(result.in == end(input));
@@ -226,8 +226,8 @@ struct memcpy_test {
         }
 
         { // Validate output shorter
-            int input[]  = {13, 55, 12345, 42};
-            int output[] = {-1, -1, -1};
+            int input[] = {13, 55, 12345, 42};
+            int output[3];
 
             auto result = ranges::uninitialized_copy(input, output);
             assert(++result.in == end(input));

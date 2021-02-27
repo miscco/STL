@@ -41,7 +41,8 @@ namespace ranges {
         template <input_iterator _It, sentinel_for<_It> _Se, _No_throw_forward_iterator _Out,
             _No_throw_sentinel_for<_Out> _OSe>
             requires constructible_from<iter_value_t<_Out>, iter_reference_t<_It>>
-        uninitialized_copy_result<_It, _Out> operator()(_It _First1, _Se _Last1, _Out _First2, _OSe _Last2) const {
+        _CONSTEXPR23_DYNALLOC uninitialized_copy_result<_It, _Out> operator()(
+            _It _First1, _Se _Last1, _Out _First2, _OSe _Last2) const {
             // clang-format on
             _Adl_verify_range(_First1, _Last1);
             _Adl_verify_range(_First2, _Last2);
@@ -57,8 +58,8 @@ namespace ranges {
         // clang-format off
         template <input_range _Rng1, _No_throw_forward_range _Rng2>
             requires constructible_from<range_value_t<_Rng2>, range_reference_t<_Rng1>>
-        uninitialized_copy_result<borrowed_iterator_t<_Rng1>, borrowed_iterator_t<_Rng2>> operator()(
-            _Rng1&& _Range1, _Rng2&& _Range2) const {
+        _CONSTEXPR23_DYNALLOC uninitialized_copy_result<borrowed_iterator_t<_Rng1>, borrowed_iterator_t<_Rng2>>
+            operator()(_Rng1&& _Range1, _Rng2&& _Range2) const {
             // clang-format on
             auto _First1  = _RANGES begin(_Range1);
             auto _UResult = _Uninitialized_copy_unchecked(
@@ -70,7 +71,7 @@ namespace ranges {
 
     private:
         template <class _It, class _Se, class _Out, class _OSe>
-        _NODISCARD static uninitialized_copy_result<_It, _Out> _Uninitialized_copy_unchecked(
+        _NODISCARD static _CONSTEXPR23_DYNALLOC uninitialized_copy_result<_It, _Out> _Uninitialized_copy_unchecked(
             _It _IFirst, const _Se _ILast, _Out _OFirst, const _OSe _OLast) {
             _STL_INTERNAL_STATIC_ASSERT(input_iterator<_It>);
             _STL_INTERNAL_STATIC_ASSERT(sentinel_for<_Se, _It>);
@@ -79,16 +80,20 @@ namespace ranges {
             _STL_INTERNAL_STATIC_ASSERT(constructible_from<iter_value_t<_Out>, iter_reference_t<_It>>);
 
             if constexpr (is_same_v<_Se, _It> && is_same_v<_OSe, _Out> && _Ptr_copy_cat<_It, _Out>::_Really_trivial) {
-                return _Copy_memcpy_common(_IFirst, _ILast, _OFirst, _OLast);
-            } else {
-                _Uninitialized_backout _Backout{_STD move(_OFirst)};
-
-                for (; _IFirst != _ILast && _Backout._Last != _OLast; ++_IFirst) {
-                    _Backout._Emplace_back(*_IFirst);
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+                if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+                {
+                    return _Copy_memcpy_common(_IFirst, _ILast, _OFirst, _OLast);
                 }
-
-                return {_STD move(_IFirst), _Backout._Release()};
             }
+            _Uninitialized_backout _Backout{_STD move(_OFirst)};
+
+            for (; _IFirst != _ILast && _Backout._Last != _OLast; ++_IFirst) {
+                _Backout._Emplace_back(*_IFirst);
+            }
+
+            return {_STD move(_IFirst), _Backout._Release()};
         }
     };
 
@@ -98,7 +103,8 @@ namespace ranges {
 
 // FUNCTION TEMPLATE uninitialized_copy_n
 template <class _InIt, class _Diff, class _NoThrowFwdIt>
-_NoThrowFwdIt uninitialized_copy_n(const _InIt _First, const _Diff _Count_raw, _NoThrowFwdIt _Dest) {
+_CONSTEXPR23_DYNALLOC _NoThrowFwdIt uninitialized_copy_n(
+    const _InIt _First, const _Diff _Count_raw, _NoThrowFwdIt _Dest) {
     // copy [_First, _First + _Count) to [_Dest, ...)
     _Algorithm_int_t<_Diff> _Count = _Count_raw;
     if (_Count <= 0) {
@@ -108,18 +114,21 @@ _NoThrowFwdIt uninitialized_copy_n(const _InIt _First, const _Diff _Count_raw, _
     auto _UFirst = _Get_unwrapped_n(_First, _Count);
     auto _UDest  = _Get_unwrapped_n(_Dest, _Count);
     if constexpr (_Ptr_copy_cat<decltype(_UFirst), decltype(_UDest)>::_Really_trivial) {
-        _UDest = _Copy_memmove(_UFirst, _UFirst + _Count, _UDest);
-    } else {
-        _Uninitialized_backout<decltype(_UDest)> _Backout{_UDest};
-
-        for (; _Count > 0; --_Count, (void) ++_UFirst) {
-            _Backout._Emplace_back(*_UFirst);
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+        if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+        {
+            _Seek_wrapped(_Dest, _Copy_memmove(_UFirst, _UFirst + _Count, _UDest));
+            return _Dest;
         }
+    }
+    _Uninitialized_backout<decltype(_UDest)> _Backout{_UDest};
 
-        _UDest = _Backout._Release();
+    for (; _Count > 0; --_Count, (void) ++_UFirst) {
+        _Backout._Emplace_back(*_UFirst);
     }
 
-    _Seek_wrapped(_Dest, _UDest);
+    _Seek_wrapped(_Dest, _Backout._Release());
     return _Dest;
 }
 
@@ -137,7 +146,7 @@ namespace ranges {
         // clang-format off
         template <input_iterator _It, _No_throw_forward_iterator _Out, _No_throw_sentinel_for<_Out> _OSe>
             requires constructible_from<iter_value_t<_Out>, iter_reference_t<_It>>
-        uninitialized_copy_n_result<_It, _Out> operator()(
+        _CONSTEXPR23_DYNALLOC uninitialized_copy_n_result<_It, _Out> operator()(
             _It _First1, iter_difference_t<_It> _Count, _Out _First2, _OSe _Last2) const {
             // clang-format on
             if (_Count <= 0) {
@@ -149,21 +158,24 @@ namespace ranges {
             auto _OFirst      = _Get_unwrapped(_STD move(_First2));
             const auto _OLast = _Get_unwrapped(_STD move(_Last2));
             if constexpr (_Ptr_copy_cat<_It, _Out>::_Really_trivial) {
-                auto _UResult = _Copy_memcpy_common(_IFirst, _IFirst + _Count, _OFirst, _OLast);
-                _IFirst       = _UResult.in;
-                _OFirst       = _UResult.out;
-            } else {
-                _Uninitialized_backout _Backout{_STD move(_OFirst)};
-
-                for (; _Count > 0 && _OFirst != _OLast; --_Count, (void) ++_IFirst) {
-                    _Backout._Emplace_back(*_IFirst);
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+                if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+                {
+                    auto _UResult = _Copy_memcpy_common(_IFirst, _IFirst + _Count, _OFirst, _OLast);
+                    _Seek_wrapped(_First1, _STD move(_UResult.in));
+                    _Seek_wrapped(_First2, _STD move(_UResult.out));
+                    return {_STD move(_First1), _STD move(_First2)};
                 }
+            }
+            _Uninitialized_backout _Backout{_STD move(_OFirst)};
 
-                _OFirst = _Backout._Release();
+            for (; _Count > 0 && _OFirst != _OLast; --_Count, (void) ++_IFirst) {
+                _Backout._Emplace_back(*_IFirst);
             }
 
             _Seek_wrapped(_First1, _IFirst);
-            _Seek_wrapped(_First2, _OFirst);
+            _Seek_wrapped(_First2, _Backout._Release());
             return {_STD move(_First1), _STD move(_First2)};
         }
     };
@@ -175,7 +187,7 @@ namespace ranges {
 #if _HAS_CXX17
 // FUNCTION TEMPLATE uninitialized_move
 template <class _InIt, class _NoThrowFwdIt>
-_NoThrowFwdIt uninitialized_move(const _InIt _First, const _InIt _Last, _NoThrowFwdIt _Dest) {
+_CONSTEXPR23_DYNALLOC _NoThrowFwdIt uninitialized_move(const _InIt _First, const _InIt _Last, _NoThrowFwdIt _Dest) {
     // move [_First, _Last) to raw [_Dest, ...)
     _Adl_verify_range(_First, _Last);
     const auto _UFirst = _Get_unwrapped(_First);
@@ -196,7 +208,8 @@ namespace ranges {
         template <input_iterator _It, sentinel_for<_It> _Se, _No_throw_forward_iterator _Out,
             _No_throw_sentinel_for<_Out> _OSe>
             requires constructible_from<iter_value_t<_Out>, iter_rvalue_reference_t<_It>>
-        uninitialized_move_result<_It, _Out> operator()(_It _First1, _Se _Last1, _Out _First2, _OSe _Last2) const {
+        _CONSTEXPR23_DYNALLOC uninitialized_move_result<_It, _Out> operator()(
+            _It _First1, _Se _Last1, _Out _First2, _OSe _Last2) const {
             // clang-format on
             _Adl_verify_range(_First1, _Last1);
             _Adl_verify_range(_First2, _Last2);
@@ -212,8 +225,8 @@ namespace ranges {
         // clang-format off
         template <input_range _Rng1, _No_throw_forward_range _Rng2>
             requires constructible_from<range_value_t<_Rng2>, range_rvalue_reference_t<_Rng1>>
-        uninitialized_move_result<borrowed_iterator_t<_Rng1>, borrowed_iterator_t<_Rng2>> operator()(
-            _Rng1&& _Range1, _Rng2&& _Range2) const {
+        _CONSTEXPR23_DYNALLOC uninitialized_move_result<borrowed_iterator_t<_Rng1>, borrowed_iterator_t<_Rng2>>
+            operator()(_Rng1&& _Range1, _Rng2&& _Range2) const {
             // clang-format on
             auto _First1  = _RANGES begin(_Range1);
             auto _UResult = _RANGES _Uninitialized_move_unchecked(
@@ -230,7 +243,8 @@ namespace ranges {
 
 // FUNCTION TEMPLATE uninitialized_move_n
 template <class _InIt, class _Diff, class _NoThrowFwdIt>
-pair<_InIt, _NoThrowFwdIt> uninitialized_move_n(_InIt _First, const _Diff _Count_raw, _NoThrowFwdIt _Dest) {
+_CONSTEXPR23_DYNALLOC pair<_InIt, _NoThrowFwdIt> uninitialized_move_n(
+    _InIt _First, const _Diff _Count_raw, _NoThrowFwdIt _Dest) {
     // move [_First, _First + _Count) to [_Dest, ...)
     _Algorithm_int_t<_Diff> _Count = _Count_raw;
     if (_Count <= 0) {
@@ -240,20 +254,23 @@ pair<_InIt, _NoThrowFwdIt> uninitialized_move_n(_InIt _First, const _Diff _Count
     auto _UFirst = _Get_unwrapped_n(_First, _Count);
     auto _UDest  = _Get_unwrapped_n(_Dest, _Count);
     if constexpr (_Ptr_move_cat<decltype(_UFirst), decltype(_UDest)>::_Really_trivial) {
-        _UDest = _Copy_memmove(_UFirst, _UFirst + _Count, _UDest);
-        _UFirst += _Count;
-    } else {
-        _Uninitialized_backout<decltype(_UDest)> _Backout{_UDest};
-
-        for (; _Count > 0; --_Count, (void) ++_UFirst) {
-            _Backout._Emplace_back(_STD move(*_UFirst));
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+        if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+        {
+            _Seek_wrapped(_First, _UFirst + _Count);
+            _Seek_wrapped(_Dest, _Copy_memmove(_UFirst, _UFirst + _Count, _UDest));
+            return {_First, _Dest};
         }
+    }
+    _Uninitialized_backout<decltype(_UDest)> _Backout{_UDest};
 
-        _UDest = _Backout._Release();
+    for (; _Count > 0; --_Count, (void) ++_UFirst) {
+        _Backout._Emplace_back(_STD move(*_UFirst));
     }
 
-    _Seek_wrapped(_Dest, _UDest);
     _Seek_wrapped(_First, _UFirst);
+    _Seek_wrapped(_Dest, _Backout._Release());
     return {_First, _Dest};
 }
 #endif // _HAS_CXX17
@@ -273,7 +290,7 @@ namespace ranges {
         // clang-format off
         template <input_iterator _It, _No_throw_forward_iterator _Out, _No_throw_sentinel_for<_Out> _OSe>
             requires constructible_from<iter_value_t<_Out>, iter_rvalue_reference_t<_It>>
-        uninitialized_move_n_result<_It, _Out> operator()(
+        _CONSTEXPR23_DYNALLOC uninitialized_move_n_result<_It, _Out> operator()(
             _It _First1, iter_difference_t<_It> _Count, _Out _First2, _OSe _Last2) const {
             // clang-format on
             if (_Count <= 0) {
@@ -285,21 +302,24 @@ namespace ranges {
             auto _OFirst      = _Get_unwrapped(_STD move(_First2));
             const auto _OLast = _Get_unwrapped(_STD move(_Last2));
             if constexpr (_Ptr_move_cat<_It, _Out>::_Really_trivial) {
-                auto _UResult = _Copy_memcpy_common(_IFirst, _IFirst + _Count, _OFirst, _OLast);
-                _IFirst       = _UResult.in;
-                _OFirst       = _UResult.out;
-            } else {
-                _Uninitialized_backout _Backout{_STD move(_OFirst)};
-
-                for (; _Count > 0 && _Backout._Last != _OLast; --_Count, (void) ++_IFirst) {
-                    _Backout._Emplace_back(_RANGES iter_move(_IFirst));
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+                if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+                {
+                    auto _UResult = _Copy_memcpy_common(_IFirst, _IFirst + _Count, _OFirst, _OLast);
+                    _Seek_wrapped(_First1, _STD move(_UResult.in));
+                    _Seek_wrapped(_First2, _STD move(_UResult.out));
+                    return {_STD move(_First1), _STD move(_First2)};
                 }
+            }
+            _Uninitialized_backout _Backout{_STD move(_OFirst)};
 
-                _OFirst = _Backout._Release();
+            for (; _Count > 0 && _Backout._Last != _OLast; --_Count, (void) ++_IFirst) {
+                _Backout._Emplace_back(_RANGES iter_move(_IFirst));
             }
 
             _Seek_wrapped(_First1, _IFirst);
-            _Seek_wrapped(_First2, _OFirst);
+            _Seek_wrapped(_First2, _Backout._Release());
             return {_STD move(_First1), _STD move(_First2)};
         }
     };
@@ -314,7 +334,7 @@ namespace ranges {
         // clang-format off
         template <_No_throw_forward_iterator _It, _No_throw_sentinel_for<_It> _Se, class _Ty>
             requires constructible_from<iter_value_t<_It>, const _Ty&>
-        _It operator()(_It _First, _Se _Last, const _Ty& _Val) const {
+        _CONSTEXPR23_DYNALLOC _It operator()(_It _First, _Se _Last, const _Ty& _Val) const {
             // clang-format on
             _Adl_verify_range(_First, _Last);
             auto _UResult = _Uninitialized_fill_unchecked(
@@ -327,39 +347,49 @@ namespace ranges {
         // clang-format off
         template <_No_throw_forward_range _Rng, class _Ty>
             requires constructible_from<range_value_t<_Rng>, const _Ty&>
-        borrowed_iterator_t<_Rng> operator()(_Rng&& _Range, const _Ty& _Val) const {
+        _CONSTEXPR23_DYNALLOC borrowed_iterator_t<_Rng> operator()(_Rng&& _Range, const _Ty& _Val) const {
             // clang-format on
             return _Rewrap_iterator(_Range, _Uninitialized_fill_unchecked(_Ubegin(_Range), _Uend(_Range), _Val));
         }
 
     private:
         template <class _It, class _Se, class _Ty>
-        _NODISCARD static _It _Uninitialized_fill_unchecked(_It _OFirst, _Se _OLast, const _Ty& _Val) {
+        _NODISCARD static _CONSTEXPR23_DYNALLOC _It _Uninitialized_fill_unchecked(
+            _It _OFirst, _Se _OLast, const _Ty& _Val) {
             _STL_INTERNAL_STATIC_ASSERT(_No_throw_forward_iterator<_It>);
             _STL_INTERNAL_STATIC_ASSERT(_No_throw_sentinel_for<_Se, _It>);
             _STL_INTERNAL_STATIC_ASSERT(constructible_from<iter_value_t<_It>, const _Ty&>);
 
             if constexpr (_Fill_memset_is_safe<_It, _Ty>) {
-                const auto _OFinal = _RANGES next(_OFirst, _STD move(_OLast));
-                _Fill_memset(_OFirst, _Val, static_cast<size_t>(_OFinal - _OFirst));
-                return _OFinal;
-            } else {
-                if constexpr (_Fill_zero_memset_is_safe<_It, _Ty>) {
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+                if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+                {
+                    const auto _OFinal = _RANGES next(_OFirst, _STD move(_OLast));
+                    _Fill_memset(_OFirst, _Val, static_cast<size_t>(_OFinal - _OFirst));
+                    return _OFinal;
+                }
+            }
+            if constexpr (_Fill_zero_memset_is_safe<_It, _Ty>) {
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+                if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+                {
                     if (_Is_all_bits_zero(_Val)) {
                         const auto _OFinal = _RANGES next(_OFirst, _STD move(_OLast));
                         _Fill_zero_memset(_OFirst, static_cast<size_t>(_OFinal - _OFirst));
                         return _OFinal;
                     }
                 }
-
-                _Uninitialized_backout _Backout{_STD move(_OFirst)};
-
-                while (_Backout._Last != _OLast) {
-                    _Backout._Emplace_back(_Val);
-                }
-
-                return _Backout._Release();
             }
+
+            _Uninitialized_backout _Backout{_STD move(_OFirst)};
+
+            while (_Backout._Last != _OLast) {
+                _Backout._Emplace_back(_Val);
+            }
+
+            return _Backout._Release();
         }
     };
 
@@ -369,7 +399,8 @@ namespace ranges {
 
 // FUNCTION TEMPLATE uninitialized_fill_n
 template <class _NoThrowFwdIt, class _Diff, class _Tval>
-_NoThrowFwdIt uninitialized_fill_n(_NoThrowFwdIt _First, const _Diff _Count_raw, const _Tval& _Val) {
+_CONSTEXPR23_DYNALLOC _NoThrowFwdIt uninitialized_fill_n(
+    _NoThrowFwdIt _First, const _Diff _Count_raw, const _Tval& _Val) {
     // copy _Count copies of _Val to raw _First
     _Algorithm_int_t<_Diff> _Count = _Count_raw;
     if (_Count <= 0) {
@@ -378,27 +409,35 @@ _NoThrowFwdIt uninitialized_fill_n(_NoThrowFwdIt _First, const _Diff _Count_raw,
 
     auto _UFirst = _Get_unwrapped_n(_First, _Count);
     if constexpr (_Fill_memset_is_safe<decltype(_UFirst), _Tval>) {
-        _Fill_memset(_UFirst, _Val, static_cast<size_t>(_Count));
-        _UFirst += _Count;
-    } else {
-        if constexpr (_Fill_zero_memset_is_safe<decltype(_UFirst), _Tval>) {
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+        if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+        {
+            _Fill_memset(_UFirst, _Val, static_cast<size_t>(_Count));
+            _Seek_wrapped(_First, _UFirst + _Count);
+            return _First;
+        }
+    }
+    if constexpr (_Fill_zero_memset_is_safe<decltype(_UFirst), _Tval>) {
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+        if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+        {
             if (_Is_all_bits_zero(_Val)) {
                 _Fill_zero_memset(_UFirst, static_cast<size_t>(_Count));
                 _Seek_wrapped(_First, _UFirst + _Count);
                 return _First;
             }
         }
-
-        _Uninitialized_backout<decltype(_UFirst)> _Backout{_UFirst};
-
-        for (; _Count > 0; --_Count) {
-            _Backout._Emplace_back(_Val);
-        }
-
-        _UFirst = _Backout._Release();
     }
 
-    _Seek_wrapped(_First, _UFirst);
+    _Uninitialized_backout<decltype(_UFirst)> _Backout{_UFirst};
+
+    for (; _Count > 0; --_Count) {
+        _Backout._Emplace_back(_Val);
+    }
+
+    _Seek_wrapped(_First, _Backout._Release());
     return _First;
 }
 
@@ -412,7 +451,7 @@ namespace ranges {
         // clang-format off
         template <_No_throw_forward_iterator _It, class _Ty>
             requires constructible_from<iter_value_t<_It>, const _Ty&>
-        _It operator()(_It _First, iter_difference_t<_It> _Count, const _Ty& _Val) const {
+        _CONSTEXPR23_DYNALLOC _It operator()(_It _First, iter_difference_t<_It> _Count, const _Ty& _Val) const {
             // clang-format on
             if (_Count <= 0) {
                 return _First;
@@ -420,30 +459,62 @@ namespace ranges {
 
             auto _UFirst = _Get_unwrapped_n(_STD move(_First), _Count);
             if constexpr (_Fill_memset_is_safe<decltype(_UFirst), _Ty>) {
-                _Fill_memset(_UFirst, _Val, static_cast<size_t>(_Count));
-                _Seek_wrapped(_First, _UFirst + _Count);
-            } else {
-                if constexpr (_Fill_zero_memset_is_safe<decltype(_UFirst), _Ty>) {
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+                if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+                {
+                    _Fill_memset(_UFirst, _Val, static_cast<size_t>(_Count));
+                    _Seek_wrapped(_First, _UFirst + _Count);
+                    return _First;
+                }
+            }
+            if constexpr (_Fill_zero_memset_is_safe<decltype(_UFirst), _Ty>) {
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+                if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+                {
                     if (_Is_all_bits_zero(_Val)) {
                         _Fill_zero_memset(_UFirst, static_cast<size_t>(_Count));
                         _Seek_wrapped(_First, _UFirst + _Count);
                         return _First;
                     }
                 }
-
-                _Uninitialized_backout _Backout{_STD move(_UFirst)};
-
-                for (; _Count > 0; --_Count) {
-                    _Backout._Emplace_back(_Val);
-                }
-
-                _Seek_wrapped(_First, _Backout._Release());
             }
+
+            _Uninitialized_backout _Backout{_STD move(_UFirst)};
+
+            for (; _Count > 0; --_Count) {
+                _Backout._Emplace_back(_Val);
+            }
+
+            _Seek_wrapped(_First, _Backout._Release());
             return _First;
         }
     };
 
     inline constexpr _Uninitialized_fill_n_fn uninitialized_fill_n{_Not_quite_object::_Construct_tag{}};
+
+    // VARIABLE ranges::default_construct_at
+    class _Default_construct_at_fn : private _Not_quite_object {
+    public:
+        using _Not_quite_object::_Not_quite_object;
+
+        // clang-format off
+        template <class _Ty>
+            requires requires(void* _Void_ptr) {
+                ::new (_Void_ptr) _Ty;
+            }
+#if 0 // TRANSITION, compiler support
+        _CONSTEXPR23_DYNALLOC
+#endif // compiler support
+        _Ty* operator()(_Ty* _Location) const noexcept(
+            noexcept(::new (const_cast<void*>(static_cast<const volatile void*>(_Location))) _Ty)) /* strengthened */ {
+            // clang-format on
+            return ::new (const_cast<void*>(static_cast<const volatile void*>(_Location))) _Ty;
+        }
+    };
+
+    inline constexpr _Default_construct_at_fn default_construct_at{_Not_quite_object::_Construct_tag{}};
 
     // VARIABLE ranges::construct_at
     class _Construct_at_fn : private _Not_quite_object {
@@ -606,6 +677,9 @@ namespace ranges {
 
 // FUNCTION TEMPLATE uninitialized_default_construct
 template <class _NoThrowFwdIt>
+#if 0 // TRANSITION, compiler support
+_CONSTEXPR23_DYNALLOC
+#endif // compiler support
 void uninitialized_default_construct(const _NoThrowFwdIt _First, const _NoThrowFwdIt _Last) {
     // default-initialize all elements in [_First, _Last)
     using _Ty = remove_reference_t<_Iter_ref_t<_NoThrowFwdIt>>;
@@ -614,7 +688,11 @@ void uninitialized_default_construct(const _NoThrowFwdIt _First, const _NoThrowF
         _Uninitialized_backout _Backout{_Get_unwrapped(_First)};
 
         for (const auto _ULast = _Get_unwrapped(_Last); _Backout._Last != _ULast; ++_Backout._Last) {
+#if _HAS_CXX20 // TRANSITION, _HAS_CXX23
+            default_construct_at(_STD addressof(*_Backout._Last));
+#else // ^^^ _HAS_CXX23 ^^^ / vvv !_HAS_CXX23 vvv
             _Default_construct_in_place(*_Backout._Last);
+#endif // !_HAS_CXX23
         }
 
         _Backout._Release();
@@ -631,6 +709,9 @@ namespace ranges {
         // clang-format off
         template <_No_throw_forward_iterator _It, _No_throw_sentinel_for<_It> _Se>
             requires default_initializable<iter_value_t<_It>>
+#if 0 // TRANSITION, compiler support
+        _CONSTEXPR23_DYNALLOC
+#endif // compiler support
         _It operator()(_It _First, _Se _Last) const {
             // clang-format on
             _Adl_verify_range(_First, _Last);
@@ -644,6 +725,9 @@ namespace ranges {
         // clang-format off
         template <_No_throw_forward_range _Rng>
             requires default_initializable<range_value_t<_Rng>>
+#if 0 // TRANSITION, compiler support
+        _CONSTEXPR23_DYNALLOC
+#endif // compiler support
         borrowed_iterator_t<_Rng> operator()(_Rng&& _Range) const {
             // clang-format on
             auto _UResult = _Uninitialized_default_construct_unchecked(_Ubegin(_Range), _Uend(_Range));
@@ -653,7 +737,12 @@ namespace ranges {
 
     private:
         template <class _It, class _Se>
-        _NODISCARD static _It _Uninitialized_default_construct_unchecked(_It _OFirst, const _Se _OLast) {
+#if 0 // TRANSITION, compiler support
+        _NODISCARD static _CONSTEXPR23_DYNALLOC
+#else // ^^^ compiler spport ^^^ / vvv no compiler support
+        _NODISCARD static
+#endif // no compiler support
+        _It _Uninitialized_default_construct_unchecked(_It _OFirst, const _Se _OLast) {
             _STL_INTERNAL_STATIC_ASSERT(_No_throw_forward_iterator<_It>);
             _STL_INTERNAL_STATIC_ASSERT(_No_throw_sentinel_for<_Se, _It>);
             _STL_INTERNAL_STATIC_ASSERT(default_initializable<iter_value_t<_It>>);
@@ -666,7 +755,11 @@ namespace ranges {
                 _Uninitialized_backout _Backout{_STD move(_OFirst)};
 
                 for (; _Backout._Last != _OLast; ++_Backout._Last) {
+#if _HAS_CXX20 // TRANSITION, _HAS_CXX23
+                    _RANGES default_construct_at(_STD addressof(*_Backout._Last));
+#else // ^^^ _HAS_CXX23 ^^^ / vvv !_HAS_CXX23 vvv
                     _Default_construct_in_place(*_Backout._Last);
+#endif // !_HAS_CXX23
                 }
 
                 return _Backout._Release();
@@ -681,6 +774,9 @@ namespace ranges {
 
 // FUNCTION TEMPLATE uninitialized_default_construct_n
 template <class _NoThrowFwdIt, class _Diff>
+#if 0 // TRANSITION, compiler support
+_CONSTEXPR23_DYNALLOC
+#endif // compiler support
 _NoThrowFwdIt uninitialized_default_construct_n(_NoThrowFwdIt _First, const _Diff _Count_raw) {
     // default-initialize all elements in [_First, _First + _Count_raw)
     using _Ty                      = _Iter_value_t<_NoThrowFwdIt>;
@@ -695,7 +791,11 @@ _NoThrowFwdIt uninitialized_default_construct_n(_NoThrowFwdIt _First, const _Dif
         _Uninitialized_backout _Backout{_Get_unwrapped_n(_First, _Count)};
 
         for (; _Count > 0; ++_Backout._Last, (void) --_Count) {
+#if _HAS_CXX20 // TRANSITION, _HAS_CXX23
+            default_construct_at(_STD addressof(*_Backout._Last));
+#else // ^^^ _HAS_CXX23 ^^^ / vvv !_HAS_CXX23 vvv
             _Default_construct_in_place(*_Backout._Last);
+#endif // !_HAS_CXX23
         }
 
         _Seek_wrapped(_First, _Backout._Release());
@@ -713,6 +813,9 @@ namespace ranges {
         // clang-format off
         template <_No_throw_forward_iterator _It>
             requires default_initializable<iter_value_t<_It>>
+#if 0 // TRANSITION, compiler support
+        _CONSTEXPR23_DYNALLOC
+#endif // compiler support
         _It operator()(_It _First, iter_difference_t<_It> _Count) const {
             // clang-format on
             if (_Count <= 0) {
@@ -726,7 +829,11 @@ namespace ranges {
                 _Uninitialized_backout _Backout{_Get_unwrapped_n(_STD move(_First), _Count)};
 
                 for (; _Count > 0; --_Count, (void) ++_Backout._Last) {
+#if _HAS_CXX20 // TRANSITION, _HAS_CXX23
+                    _RANGES default_construct_at(_STD addressof(*_Backout._Last));
+#else // ^^^ _HAS_CXX23 ^^^ / vvv !_HAS_CXX23 vvv
                     _Default_construct_in_place(*_Backout._Last);
+#endif // !_HAS_CXX23
                 }
 
                 _Seek_wrapped(_First, _Backout._Release());
@@ -742,22 +849,27 @@ namespace ranges {
 
 // FUNCTION TEMPLATE uninitialized_value_construct
 template <class _NoThrowFwdIt>
-void uninitialized_value_construct(const _NoThrowFwdIt _First, const _NoThrowFwdIt _Last) {
+_CONSTEXPR23_DYNALLOC void uninitialized_value_construct(const _NoThrowFwdIt _First, const _NoThrowFwdIt _Last) {
     // value-initialize all elements in [_First, _Last)
     _Adl_verify_range(_First, _Last);
     const auto _UFirst = _Get_unwrapped(_First);
     const auto _ULast  = _Get_unwrapped(_Last);
     if constexpr (_Use_memset_value_construct_v<_Unwrapped_t<const _NoThrowFwdIt&>>) {
-        _Zero_range(_UFirst, _ULast);
-    } else {
-        _Uninitialized_backout _Backout{_UFirst};
-
-        while (_Backout._Last != _ULast) {
-            _Backout._Emplace_back();
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+        if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+        {
+            _Zero_range(_UFirst, _ULast);
+            return;
         }
-
-        _Backout._Release();
     }
+    _Uninitialized_backout _Backout{_UFirst};
+
+    while (_Backout._Last != _ULast) {
+        _Backout._Emplace_back();
+    }
+
+    _Backout._Release();
 }
 
 #ifdef __cpp_lib_concepts
@@ -770,7 +882,7 @@ namespace ranges {
         // clang-format off
         template <_No_throw_forward_iterator _It, _No_throw_sentinel_for<_It> _Se>
             requires default_initializable<iter_value_t<_It>>
-        _It operator()(_It _First, _Se _Last) const {
+        _CONSTEXPR23_DYNALLOC _It operator()(_It _First, _Se _Last) const {
             // clang-format on
             _Adl_verify_range(_First, _Last);
             auto _UResult = _Uninitialized_value_construct_unchecked(
@@ -783,7 +895,7 @@ namespace ranges {
         // clang-format off
         template <_No_throw_forward_range _Rng>
             requires default_initializable<range_value_t<_Rng>>
-        borrowed_iterator_t<_Rng> operator()(_Rng&& _Range) const {
+        _CONSTEXPR23_DYNALLOC borrowed_iterator_t<_Rng> operator()(_Rng&& _Range) const {
             // clang-format on
             auto _UResult = _Uninitialized_value_construct_unchecked(_Ubegin(_Range), _Uend(_Range));
 
@@ -792,22 +904,26 @@ namespace ranges {
 
     private:
         template <class _It, class _Se>
-        _NODISCARD static _It _Uninitialized_value_construct_unchecked(_It _OFirst, _Se _OLast) {
+        _NODISCARD static _CONSTEXPR23_DYNALLOC _It _Uninitialized_value_construct_unchecked(_It _OFirst, _Se _OLast) {
             _STL_INTERNAL_STATIC_ASSERT(_No_throw_forward_iterator<_It>);
             _STL_INTERNAL_STATIC_ASSERT(_No_throw_sentinel_for<_Se, _It>);
             _STL_INTERNAL_STATIC_ASSERT(default_initializable<iter_value_t<_It>>);
 
             if constexpr (_Use_memset_value_construct_v<_It>) {
-                return _Zero_range(_OFirst, _RANGES next(_OFirst, _STD move(_OLast)));
-            } else {
-                _Uninitialized_backout _Backout{_STD move(_OFirst)};
-
-                while (_Backout._Last != _OLast) {
-                    _Backout._Emplace_back();
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+                if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+                {
+                    return _Zero_range(_OFirst, _RANGES next(_OFirst, _STD move(_OLast)));
                 }
-
-                return _Backout._Release();
             }
+            _Uninitialized_backout _Backout{_STD move(_OFirst)};
+
+            while (_Backout._Last != _OLast) {
+                _Backout._Emplace_back();
+            }
+
+            return _Backout._Release();
         }
     };
 
@@ -818,7 +934,7 @@ namespace ranges {
 
 // FUNCTION TEMPLATE uninitialized_value_construct_n
 template <class _NoThrowFwdIt, class _Diff>
-_NoThrowFwdIt uninitialized_value_construct_n(_NoThrowFwdIt _First, const _Diff _Count_raw) {
+_CONSTEXPR23_DYNALLOC _NoThrowFwdIt uninitialized_value_construct_n(_NoThrowFwdIt _First, const _Diff _Count_raw) {
     // value-initialize all elements in [_First, _First + _Count_raw)
     _Algorithm_int_t<_Diff> _Count = _Count_raw;
     if (_Count <= 0) {
@@ -839,7 +955,7 @@ namespace ranges {
         // clang-format off
         template <_No_throw_forward_iterator _It>
             requires default_initializable<iter_value_t<_It>>
-        _It operator()(_It _First, iter_difference_t<_It> _Count) const {
+        _CONSTEXPR23_DYNALLOC _It operator()(_It _First, iter_difference_t<_It> _Count) const {
             // clang-format on
             if (_Count <= 0) {
                 return _First;
@@ -847,16 +963,21 @@ namespace ranges {
 
             auto _UFirst = _Get_unwrapped_n(_STD move(_First), _Count);
             if constexpr (_Use_memset_value_construct_v<_It>) {
-                _Seek_wrapped(_First, _Zero_range(_UFirst, _UFirst + _Count));
-            } else {
-                _Uninitialized_backout _Backout{_STD move(_UFirst)};
-
-                for (; _Count > 0; --_Count) {
-                    _Backout._Emplace_back();
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+                if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+                {
+                    _Seek_wrapped(_First, _Zero_range(_UFirst, _UFirst + _Count));
+                    return _First;
                 }
-
-                _Seek_wrapped(_First, _Backout._Release());
             }
+            _Uninitialized_backout _Backout{_STD move(_UFirst)};
+
+            for (; _Count > 0; --_Count) {
+                _Backout._Emplace_back();
+            }
+
+            _Seek_wrapped(_First, _Backout._Release());
             return _First;
         }
     };

@@ -1162,13 +1162,19 @@
 #ifndef _M_CEE
 #define __cpp_lib_parallel_algorithm 201603L
 #endif // _M_CEE
-#define __cpp_lib_raw_memory_algorithms 201606L
-#define __cpp_lib_sample                201603L
-#define __cpp_lib_scoped_lock           201703L
-#define __cpp_lib_shared_ptr_weak_type  201606L
-#define __cpp_lib_string_view           201803L
-#define __cpp_lib_to_chars              201611L
-#define __cpp_lib_variant               201606L
+
+#if _HAS_CXX20 && defined(__cpp_lib_constexpr_dynamic_alloc) // TRANSITION, enable only in C++23 when available
+#define __cpp_lib_raw_memory_algorithms 202106L
+#else
+#define __cpp_lib_raw_memory_algorithms 202106L
+#endif
+
+#define __cpp_lib_sample               201603L
+#define __cpp_lib_scoped_lock          201703L
+#define __cpp_lib_shared_ptr_weak_type 201606L
+#define __cpp_lib_string_view          201803L
+#define __cpp_lib_to_chars             201611L
+#define __cpp_lib_variant              201606L
 #endif // _HAS_CXX17
 
 #if _HAS_CXX17
@@ -1323,6 +1329,13 @@
 #define _CONSTEXPR20_CONTAINER constexpr
 #else
 #define _CONSTEXPR20_CONTAINER inline
+#endif
+
+// Functions that became constexpr in C++23 via P2283
+#ifdef __cpp_lib_constexpr_dynamic_alloc // TRANSITION, enable only in C++23 when available
+#define _CONSTEXPR23_DYNALLOC constexpr
+#else
+#define _CONSTEXPR23_DYNALLOC inline
 #endif
 
 #ifdef _RTC_CONVERSION_CHECKS_ENABLED

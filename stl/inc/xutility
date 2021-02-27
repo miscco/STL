@@ -135,6 +135,18 @@ _NODISCARD constexpr void* _Voidify_iter(_Iter _It) noexcept {
     }
 }
 
+// FUNCTION TEMPLATE default_construct_at
+#if _HAS_CXX20 // TRANSITION, _HAS_CXX23
+template <class _Ty, class = void_t<decltype(::new (_STD declval<void*>()) _Ty)>>
+#if 0 // TRANSITION, compiler suport
+_CONSTEXPR20_DYNALLOC
+#endif // compiler support
+_Ty* default_construct_at(_Ty* const _Location) noexcept(
+    noexcept(::new (_Voidify_iter(_Location)) _Ty)) /* strengthened */ {
+    return ::new (_Voidify_iter(_Location)) _Ty;
+}
+#endif // _HAS_CXX20
+
 // FUNCTION TEMPLATE construct_at
 #if _HAS_CXX20
 template <class _Ty, class... _Types,
@@ -4454,7 +4466,7 @@ void _Fill_zero_memset(_CtgIt _Dest, const size_t _Count) {
 }
 
 template <class _Ty>
-_NODISCARD bool _Is_all_bits_zero(const _Ty& _Val) {
+_NODISCARD _CONSTEXPR23_DYNALLOC bool _Is_all_bits_zero(const _Ty& _Val) {
     // checks if scalar type has all bits set to zero
     _STL_INTERNAL_STATIC_ASSERT(is_scalar_v<_Ty> && !is_member_pointer_v<_Ty>);
     constexpr _Ty _Zero{};
