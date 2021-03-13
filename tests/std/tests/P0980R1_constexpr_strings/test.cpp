@@ -1526,7 +1526,7 @@ _CONSTEXPR20_CONTAINER bool test_iterators() {
         cit = cit2;
     }
 
-#if 0 // TRANSITION, understand the bug
+#if defined(MSVC_INTERNAL_TESTING) || defined(__EDG__) // TRANSITION, VSO-1270433
     { // op->
         basic_string<CharLikeType<CharType>> bs{CharType{'x'}};
         auto it = bs.begin();
@@ -1537,7 +1537,7 @@ _CONSTEXPR20_CONTAINER bool test_iterators() {
         auto cc  = cit->c;
         assert(cc == CharType{'x'});
     }
-#endif
+#endif // defined(MSVC_INTERNAL_TESTING) || defined(__EDG__)
 
     { // increment
         auto it = literal_constructed.begin();
