@@ -298,6 +298,11 @@ public:
     }
 
     static _CONSTEXPR17 void assign(_Elem& _Left, const _Elem& _Right) noexcept {
+#ifdef __cpp_lib_is_constant_evaluated
+        if (_STD is_constant_evaluated()) {
+            return _Primary_char_traits::assign(_Left, _Right);
+        }
+#endif // __cpp_lib_is_constant_evaluated
         _Left = _Right;
     }
 
@@ -447,6 +452,11 @@ public:
     }
 
     static _CONSTEXPR17 void assign(_Elem& _Left, const _Elem& _Right) noexcept {
+#ifdef __cpp_lib_is_constant_evaluated
+        if (_STD is_constant_evaluated()) {
+            return _Primary_char_traits::assign(_Left, _Right);
+        }
+#endif // __cpp_lib_is_constant_evaluated
         _Left = _Right;
     }
 
@@ -2102,7 +2112,8 @@ public:
 template <class _Mystr>
 _NODISCARD _CONSTEXPR20_CONTAINER _String_const_iterator<_Mystr> operator+(
     typename _String_const_iterator<_Mystr>::difference_type _Off, _String_const_iterator<_Mystr> _Next) noexcept {
-    return _Next += _Off;
+    _Next += _Off;
+    return _Next;
 }
 
 #if _HAS_CXX20
@@ -2224,7 +2235,8 @@ public:
 template <class _Mystr>
 _NODISCARD _CONSTEXPR20_CONTAINER _String_iterator<_Mystr> operator+(
     typename _String_iterator<_Mystr>::difference_type _Off, _String_iterator<_Mystr> _Next) noexcept {
-    return _Next += _Off;
+    _Next += _Off;
+    return _Next;
 }
 
 #if _HAS_CXX20
@@ -4013,6 +4025,11 @@ public:
         // exchange a string in large mode with one in small mode
         const pointer _Ptr = _Starts_large._Bx._Ptr;
         _Destroy_in_place(_Starts_large._Bx._Ptr);
+#ifdef __cpp_lib_constexpr_string
+        if (_STD is_constant_evaluated()) {
+            _Construct_in_place(_Starts_large._Bx);
+        }
+#endif // __cpp_lib_constexpr_string
         _Traits::copy(_Starts_large._Bx._Buf, _Starts_small._Bx._Buf, _BUF_SIZE);
         _Construct_in_place(_Starts_small._Bx._Ptr, _Ptr);
     }
@@ -4550,6 +4567,11 @@ private:
         const pointer _Ptr = _Mypair._Myval2._Bx._Ptr;
         auto& _Al          = _Getal();
         _Destroy_in_place(_Mypair._Myval2._Bx._Ptr);
+#ifdef __cpp_lib_constexpr_string
+        if (_STD is_constant_evaluated()) {
+            _Construct_in_place(_Mypair._Myval2._Bx);
+        }
+#endif // __cpp_lib_constexpr_string
         _Traits::copy(_Mypair._Myval2._Bx._Buf, _Unfancy(_Ptr), _Mypair._Myval2._Mysize + 1);
         _Al.deallocate(_Ptr, _Mypair._Myval2._Myres + 1);
         _Mypair._Myval2._Myres = _BUF_SIZE - 1;
@@ -4565,6 +4587,11 @@ private:
         _My_data._Mysize = 0;
         _My_data._Myres  = _BUF_SIZE - 1;
         // the _Traits::assign is last so the codegen doesn't think the char write can alias this
+#ifdef __cpp_lib_constexpr_string
+        if (_STD is_constant_evaluated()) {
+            _Construct_in_place(_Mypair._Myval2._Bx);
+        }
+#endif // __cpp_lib_constexpr_string
         _Traits::assign(_My_data._Bx._Buf[0], _Elem());
     }
 
@@ -4574,6 +4601,11 @@ private:
             const pointer _Ptr = _Mypair._Myval2._Bx._Ptr;
             auto& _Al          = _Getal();
             _Destroy_in_place(_Mypair._Myval2._Bx._Ptr);
+#ifdef __cpp_lib_constexpr_string
+            if (_STD is_constant_evaluated()) {
+                _Construct_in_place(_Mypair._Myval2._Bx);
+            }
+#endif // __cpp_lib_constexpr_string
             _Al.deallocate(_Ptr, _Mypair._Myval2._Myres + 1);
         }
 
