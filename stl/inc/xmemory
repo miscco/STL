@@ -1483,10 +1483,6 @@ struct _NODISCARD _Uninitialized_backout {
 
 #ifdef __cpp_lib_concepts
 namespace ranges {
-    // CONCEPT _Convertible_from
-    template <class _To, class _From>
-    concept _Convertible_from = convertible_to<_From, _To>;
-
     // STRUCT TEMPLATE in_out_result
     template <class _In, class _Out>
     struct in_out_result {
@@ -1579,20 +1575,25 @@ namespace ranges {
     template <input_iterator _It, sentinel_for<_It> _Se, _No_throw_forward_iterator _Out,
         _No_throw_sentinel_for<_Out> _OSe>
         requires constructible_from<iter_value_t<_Out>, iter_rvalue_reference_t<_It>>
-    uninitialized_move_result<_It, _Out> _Uninitialized_move_unchecked(
+    _CONSTEXPR23_DYNALLOC uninitialized_move_result<_It, _Out> _Uninitialized_move_unchecked(
             _It _IFirst, const _Se _ILast, _Out _OFirst, const _OSe _OLast) {
         // clang-format on
-        if constexpr (is_same_v<_Se, _It> && _Ptr_move_cat<_It, _Out>::_Really_trivial) {
-            return _Copy_memcpy_common(_IFirst, _ILast, _OFirst, _OLast);
-        } else {
-            _Uninitialized_backout _Backout{_STD move(_OFirst)};
-
-            for (; _IFirst != _ILast && _Backout._Last != _OLast; ++_IFirst) {
-                _Backout._Emplace_back(_RANGES iter_move(_IFirst));
+        if constexpr (is_same_v<_Se, _It> && is_same_v<_OSe, _Out> && _Ptr_move_cat<_It, _Out>::_Really_trivial) {
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+            if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+            {
+                return _Copy_memcpy_common(_IFirst, _ILast, _OFirst, _OLast);
             }
-
-            return {_STD move(_IFirst), _Backout._Release()};
         }
+
+        _Uninitialized_backout _Backout{_STD move(_OFirst)};
+
+        for (; _IFirst != _ILast && _Backout._Last != _OLast; ++_IFirst) {
+            _Backout._Emplace_back(_RANGES iter_move(_IFirst));
+        }
+
+        return {_STD move(_IFirst), _Backout._Release()};
     }
 } // namespace ranges
 #endif // __cpp_lib_concepts
@@ -1684,8 +1685,9 @@ _CONSTEXPR20_DYNALLOC _NoThrowFwdIt _Uninitialized_copy_unchecked(
     return _Backout._Release();
 }
 
+
 template <class _InIt, class _NoThrowFwdIt>
-_NoThrowFwdIt uninitialized_copy(const _InIt _First, const _InIt _Last, _NoThrowFwdIt _Dest) {
+_CONSTEXPR20_DYNALLOC _NoThrowFwdIt uninitialized_copy(const _InIt _First, const _InIt _Last, _NoThrowFwdIt _Dest) {
     // copy [_First, _Last) to raw [_Dest, ...)
     _Adl_verify_range(_First, _Last);
     auto _UFirst      = _Get_unwrapped(_First);
@@ -1759,40 +1761,52 @@ _CONSTEXPR20_DYNALLOC _Alloc_ptr_t<_Alloc> _Uninitialized_fill_n(
 
 // FUNCTION TEMPLATE uninitialized_fill
 template <class _NoThrowFwdIt, class _Tval>
-void uninitialized_fill(const _NoThrowFwdIt _First, const _NoThrowFwdIt _Last, const _Tval& _Val) {
+_CONSTEXPR20_DYNALLOC void uninitialized_fill(
+    const _NoThrowFwdIt _First, const _NoThrowFwdIt _Last, const _Tval& _Val) {
     // copy _Val throughout raw [_First, _Last)
     _Adl_verify_range(_First, _Last);
     auto _UFirst      = _Get_unwrapped(_First);
     const auto _ULast = _Get_unwrapped(_Last);
     if constexpr (_Fill_memset_is_safe<_Unwrapped_t<const _NoThrowFwdIt&>, _Tval>) {
-        _Fill_memset(_UFirst, _Val, static_cast<size_t>(_ULast - _UFirst));
-    } else {
-        if constexpr (_Fill_zero_memset_is_safe<_Unwrapped_t<const _NoThrowFwdIt&>, _Tval>) {
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+        if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+        {
+            _Fill_memset(_UFirst, _Val, static_cast<size_t>(_ULast - _UFirst));
+            return;
+        }
+    }
+    if constexpr (_Fill_zero_memset_is_safe<_Unwrapped_t<const _NoThrowFwdIt&>, _Tval>) {
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+        if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+        {
             if (_Is_all_bits_zero(_Val)) {
                 _Fill_zero_memset(_UFirst, static_cast<size_t>(_ULast - _UFirst));
                 return;
             }
         }
-
-        _Uninitialized_backout<_Unwrapped_t<const _NoThrowFwdIt&>> _Backout{_UFirst};
-        while (_Backout._Last != _ULast) {
-            _Backout._Emplace_back(_Val);
-        }
-
-        _Backout._Release();
     }
+
+    _Uninitialized_backout<_Unwrapped_t<const _NoThrowFwdIt&>> _Backout{_UFirst};
+    while (_Backout._Last != _ULast) {
+        _Backout._Emplace_back(_Val);
+    }
+
+    _Backout._Release();
 }
 
 // FUNCTION TEMPLATE _Uninitialized_value_construct_n WITH ALLOCATOR
 template <class _NoThrowFwdIt>
-_INLINE_VAR constexpr bool _Use_memset_value_construct_v = conjunction_v<is_pointer<_NoThrowFwdIt>,
-    is_scalar<_Iter_value_t<_NoThrowFwdIt>>, negation<is_volatile<remove_reference_t<_Iter_ref_t<_NoThrowFwdIt>>>>,
-    negation<is_member_pointer<_Iter_value_t<_NoThrowFwdIt>>>>;
+_INLINE_VAR constexpr bool _Use_memset_value_construct_v =
+    conjunction_v<bool_constant<_Iterator_is_contiguous<_NoThrowFwdIt>>, is_scalar<_Iter_value_t<_NoThrowFwdIt>>,
+        negation<is_volatile<remove_reference_t<_Iter_ref_t<_NoThrowFwdIt>>>>,
+        negation<is_member_pointer<_Iter_value_t<_NoThrowFwdIt>>>>;
 
 template <class _Ptr>
 _Ptr _Zero_range(const _Ptr _First, const _Ptr _Last) { // fill [_First, _Last) with zeroes
-    char* const _First_ch = reinterpret_cast<char*>(_First);
-    char* const _Last_ch  = reinterpret_cast<char*>(_Last);
+    char* const _First_ch = reinterpret_cast<char*>(_To_address(_First));
+    char* const _Last_ch  = reinterpret_cast<char*>(_To_address(_Last));
     _CSTD memset(_First_ch, 0, static_cast<size_t>(_Last_ch - _First_ch));
     return _Last;
 }
@@ -1822,19 +1836,23 @@ _CONSTEXPR20_DYNALLOC _Alloc_ptr_t<_Alloc> _Uninitialized_value_construct_n(
 }
 
 template <class _NoThrowFwdIt, class _Diff>
-_NoThrowFwdIt _Uninitialized_value_construct_n_unchecked1(_NoThrowFwdIt _UFirst, _Diff _Count) {
+_CONSTEXPR20_DYNALLOC _NoThrowFwdIt _Uninitialized_value_construct_n_unchecked1(_NoThrowFwdIt _UFirst, _Diff _Count) {
     // value-initialize all elements in [_UFirst, _UFirst + _Count_raw)
     _STL_INTERNAL_CHECK(_Count >= 0);
     if constexpr (_Use_memset_value_construct_v<_NoThrowFwdIt>) {
-        return _Zero_range(_UFirst, _UFirst + _Count);
-    } else {
-        _Uninitialized_backout<_NoThrowFwdIt> _Backout{_UFirst};
-        for (; 0 < _Count; --_Count) {
-            _Backout._Emplace_back();
+#ifdef __cpp_lib_constexpr_dynamic_alloc
+        if (!_STD is_constant_evaluated())
+#endif // __cpp_lib_constexpr_dynamic_alloc
+        {
+            return _Zero_range(_UFirst, _UFirst + _Count);
         }
-
-        return _Backout._Release();
     }
+    _Uninitialized_backout<_NoThrowFwdIt> _Backout{_UFirst};
+    for (; 0 < _Count; --_Count) {
+        _Backout._Emplace_back();
+    }
+
+    return _Backout._Release();
 }
 
 #if _HAS_DEPRECATED_TEMPORARY_BUFFER
@@ -1870,7 +1888,7 @@ struct _In_place_key_extract_set<_Key, _Key> {
 
 // STRUCT TEMPLATE _In_place_key_extract_map
 // assumes _Args have already been _Remove_cvref_t'd
-template <class _Key, class... Args>
+template <class _Key, class... _Args>
 struct _In_place_key_extract_map {
     // by default we can't extract the key in the emplace family and must construct a node we might not use
     static constexpr bool _Extractable = false;

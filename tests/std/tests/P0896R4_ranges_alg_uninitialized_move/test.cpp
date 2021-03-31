@@ -204,18 +204,20 @@ struct memcpy_test {
     static constexpr int expected_input_long[]  = {13, 55, 12345, 42};
 
     static void call() {
-        { // Validate range
+        { // Validate matching ranges
             int input[]  = {13, 55, 12345};
             int output[] = {-1, -1, -1};
 
-            ranges::uninitialized_move(input, output);
+            const auto result = ranges::uninitialized_move(input, output);
+            assert(result.in == end(input));
+            assert(result.out == end(output));
             assert(ranges::equal(input, expected_input));
             assert(ranges::equal(output, expected_output));
         }
 
         { // Validate input shorter
-            int input[]  = {13, 55, 12345};
-            int output[] = {-1, -1, -1, -1};
+            int input[] = {13, 55, 12345};
+            int output[4];
 
             auto result = ranges::uninitialized_move(input, output);
             assert(result.in == end(input));
@@ -225,13 +227,37 @@ struct memcpy_test {
         }
 
         { // Validate output shorter
-            int input[]  = {13, 55, 12345, 42};
-            int output[] = {-1, -1, -1};
+            int input[] = {13, 55, 12345, 42};
+            int output[3];
 
             auto result = ranges::uninitialized_move(input, output);
             assert(++result.in == end(input));
             assert(result.out == end(output));
             assert(ranges::equal(input, expected_input_long));
+            assert(ranges::equal(output, expected_output));
+        }
+
+        { // Validate non-common input range
+            int input[]  = {13, 55, 12345};
+            int output[] = {-1, -1, -1};
+
+            const auto result =
+                ranges::uninitialized_move(begin(input), unreachable_sentinel, begin(output), end(output));
+            assert(result.in == end(input));
+            assert(result.out == end(output));
+            assert(ranges::equal(input, expected_input));
+            assert(ranges::equal(output, expected_output));
+        }
+
+        { // Validate non-common output range
+            int input[]  = {13, 55, 12345};
+            int output[] = {-1, -1, -1};
+
+            const auto result =
+                ranges::uninitialized_move(begin(input), end(input), begin(output), unreachable_sentinel);
+            assert(result.in == end(input));
+            assert(result.out == end(output));
+            assert(ranges::equal(input, expected_input));
             assert(ranges::equal(output, expected_output));
         }
     }
