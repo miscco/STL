@@ -493,16 +493,15 @@ _CONSTEXPR23_CONTAINER void test_emplace() {
 }
 
 _CONSTEXPR23_CONTAINER void test_insert() {
-#if 0
     constexpr int expected_insert[] = {0, 3, 5};
     constexpr int to_be_inserted    = 3;
 
     {
-        deq insert_lvalue      = {0, 5};
-        auto res_insert_lvalue = insert_lvalue.insert(insert_lvalue.begin() + 1, to_be_inserted);
-        static_assert(is_same_v<decltype(res_insert_lvalue), deq::iterator>, "");
-        assert(equal(insert_lvalue, expected_insert));
-        assert(res_insert_lvalue == insert_lvalue.begin() + 1);
+        deq insert_lvalue = {0, 5};
+        const auto res    = insert_lvalue.insert(insert_lvalue.begin() + 1, to_be_inserted);
+        static_assert(is_same_v<decltype(res), deq::iterator>, "");
+        assert(equal(insert_lvalue, res));
+        assert(res == insert_lvalue.begin() + 1);
     }
     {
         deq insert_lvalue_const      = {0, 5};
@@ -556,7 +555,6 @@ _CONSTEXPR23_CONTAINER void test_insert() {
         assert(equal(insert_initializer_const, input));
         assert(res_insert_initializer_const == insert_initializer_const.cbegin() + 1);
     }
-#endif // 0
 }
 
 _CONSTEXPR23_CONTAINER void test_modifiers() {

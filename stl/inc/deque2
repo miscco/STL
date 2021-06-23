@@ -958,7 +958,7 @@ public:
             _Orphan_range(_UEnd, _UEnd);
             _Target = _Last;
         } else {
-            _Grow_blocks_right(1);
+            _Grow_blocks_back(1);
             _Target = _My_data._Last;
         }
 
@@ -991,7 +991,7 @@ public:
             _Target->_First = _Target->_Begin + _Deque_block_size;
             _Target->_Last  = _Target->_Begin + _Deque_block_size;
         } else {
-            _Grow_blocks_left(1);
+            _Grow_blocks_front(1);
             _Target         = _My_data._First - 1;
             _Target->_First = _Target->_Begin + _Deque_block_size;
             _Target->_Last  = _Target->_Begin + _Deque_block_size;
@@ -1095,11 +1095,11 @@ public:
 
     template <class _Iter, enable_if_t<_Is_iterator_v<_Iter>, int> = 0>
     _CONSTEXPR23_CONTAINER iterator insert(const_iterator _Where, _Iter _IFirst, _Iter _ILast) {
-        auto& _My_data     = _Mypair._Myval2;
         const auto _UWhere = _Unchecked_iterator{_Where._Block, _Where._Current};
 
         const auto _Strat = _Choose_strategy(_UWhere, _UWhere);
 #if _ITERATOR_DEBUG_LEVEL == 2
+        auto& _My_data     = _Mypair._Myval2;
         const auto _UBegin = _Unchecked_begin();
         const auto _UEnd   = _Unchecked_end();
         _STL_VERIFY(_Where._Getcont() == _STD addressof(_My_data) && _UBegin <= _UWhere && _UWhere <= _UEnd,
@@ -1384,6 +1384,28 @@ private:
         return static_cast<size_type>(_Blocks * _Deque_block_size + _Block_size - _Hole);
     }
 
+    enum class _Modifier_strategy : uint8_t {
+        _At_front,
+        _Shift_to_front,
+        _Shift_to_back,
+        _At_back,
+    };
+
+    _NODISCARD constexpr _Modifier_strategy _Choose_strategy(
+        const _Unchecked_iterator _Left, const _Unchecked_iterator _Right) noexcept {
+        const auto _UBegin = _Unchecked_begin();
+        const auto _UEnd   = _Unchecked_end();
+        if (_Right == _UEnd) {
+            return _Modifier_strategy::_At_back;
+        } else if (_Left == _UBegin) {
+            return _Modifier_strategy::_At_front;
+        } else if (_Left - _UBegin < _UEnd - _Right) {
+            return _Modifier_strategy::_Shift_to_back;
+        } else {
+            return _Modifier_strategy::_Shift_to_front;
+        }
+    }
+
     template <_Deque_strat _Strat, class _Iter>
     _NODISCARD _CONSTEXPR23_CONTAINER _Iter _Block_construct(
         const _Blockptr _Block, _Iter _IFirst, _Iter _ILast, const difference_type _End_index = _Deque_block_size) {
@@ -1448,7 +1470,7 @@ private:
         _STL_INTERNAL_CHECK(_Dest == _My_data._Last);
         while (_IFirst != _ILast) {
             if constexpr (!_Is_fwd_iter_v<_Iter>) {
-                _Grow_blocks_right(1);
+                _Grow_blocks_back(1);
             }
 
             _IFirst = _Block_construct<_Strat>(_My_data._Last, _STD move(_IFirst), _ILast);
@@ -1480,7 +1502,7 @@ private:
             const auto _Count         = _Convert_size<size_type>(static_cast<size_t>(_STD distance(_IFirst, _ILast)));
             const auto _Partial_slots = _Count % _Deque_block_size;
             const auto _Num_blocks    = _Count / _Deque_block_size + (_Partial_slots == 0 ? 0 : 1);
-            _Grow_blocks_right(_Num_blocks);
+            _Grow_blocks_back(_Num_blocks);
 
             // Balance the allocated elements so that we have equal space at front and back
             const auto _Off        = _Partial_slots == 0 ? 0 : (_Deque_block_size - _Partial_slots) / 2;
@@ -1525,7 +1547,7 @@ private:
             }
         } else {
             if (_Mypair._Myval2._Begin == nullptr) {
-                _Grow_blocks_right(1);
+                _Grow_blocks_back(1);
             }
             _New_first = _My_data._First->_Begin;
         }
@@ -1578,7 +1600,7 @@ private:
             const auto _Count =
                 _Convert_size<size_type>(static_cast<size_t>(_STD distance(_IFirst, _ILast) - _Free_slots));
             const auto _Newblocks = _Count / _Deque_block_size + (_Count % _Deque_block_size == 0 ? 0 : 1);
-            _Grow_blocks_right(_Newblocks);
+            _Grow_blocks_back(_Newblocks);
 
             const auto _Result = _Unchecked_end();
             _Construct_blocks<_Strat>(_Result._Block, _STD move(_IFirst), _STD move(_ILast));
@@ -1603,17 +1625,17 @@ private:
             const auto _Count =
                 _Convert_size<size_type>(static_cast<size_t>(_STD distance(_IFirst, _ILast) - _Free_slots));
             const auto _Newblocks = _Count / _Deque_block_size + (_Count % _Deque_block_size == 0 ? 0 : 1);
-            _Grow_blocks_left(_Newblocks);
+            _Grow_blocks_front(_Newblocks);
 
             // We fake that this is an empty deque that we construct
             const auto _Result        = _Unchecked_begin();
-            const auto _New_first     = _Result - _Count;
+            const auto _New_first     = _Result - static_cast<difference_type>(_Count);
             _New_first._Block->_First = _New_first._Current;
             _New_first._Block->_Last  = _New_first._Current;
             const auto _Old_last      = _STD exchange(_My_data._Last, _New_first._Block);
 
             _TRY_BEGIN
-            _Construct_blocks<_Strat>(_New_first, _STD move(_IFirst), _STD move(_ILast));
+            _Construct_blocks<_Strat>(_New_first._Block, _STD move(_IFirst), _STD move(_ILast));
             _My_data._Last = _Old_last;
             _CATCH_ALL
             _My_data._Last = _Old_last;
@@ -1638,49 +1660,155 @@ private:
         if (_IFirst == _ILast) {
             return iterator{_UWhere._Block, _UWhere._Current, _STD addressof(_My_data)};
         }
+        _STL_INTERNAL_CHECK(_UWhere != _Unchecked_begin());
 
-        if constexpr (_Is_fwd_iter_v<_Iter>) {
-            _Blockptr& _First      = _My_data._First;
-            const auto _Free_slots = _First == _My_data._Last ? 0 : (_First->_First - _First->_Begin);
-            const auto _Count =
-                _Convert_size<size_type>(static_cast<size_t>(_STD distance(_IFirst, _ILast) - _Free_slots));
-            const auto _Newblocks = _Count / _Deque_block_size + (_Count % _Deque_block_size == 0 ? 0 : 1);
-            _Grow_blocks_right(_Newblocks);
+        const auto _Insert_pos = _To_position(_UWhere);
+        const auto _Old_size   = size(); // We need to use the size as we are growing inside _Construct_blocks
+        _Construct_blocks<_Deque_strat::_Copy>(_Unchecked_end()._Block, _STD move(_IFirst), _STD move(_ILast));
 
-            const auto _Result = _Unchecked_end();
-            _Construct_blocks<_Deque_strat::_Copy>(_Result._Block, _STD move(_IFirst), _STD move(_ILast));
-            return iterator{_Result._Block, _Result._Current, _STD addressof(_My_data)};
+        // TRANSITION Build specialized rotate
+        const auto _Result = _STD rotate(_To_iter(_Insert_pos), _To_iter(_Old_size), _Unchecked_end());
+        return iterator{_Result._Block, _Result._Current, _STD addressof(_My_data)};
+    }
+
+    template <class _Iter>
+    _CONSTEXPR23_CONTAINER _Unchecked_iterator _Insert_shift_front(
+        _Unchecked_iterator _UWhere, _Iter _IFirst, _Iter _ILast) {
+        _STL_INTERNAL_CHECK(_My_data._First != _My_data._Last);
+        _STL_INTERNAL_STATIC_ASSERT(_Is_fwd_iter_v<_Iter>);
+        auto& _My_data    = _Mypair._Myval2;
+        _Blockptr& _First = _My_data._First;
+
+        const auto _Count      = _Convert_size<size_type>(static_cast<size_t>(_STD distance(_IFirst, _ILast)));
+        const auto _Insert_pos = _To_position(_UWhere);
+        const auto _Free_slots = _First->_First - _First->_Begin;
+        const auto _Newblocks =
+            (_Count - _Free_slots) / _Deque_block_size + ((_Count - _Free_slots) % _Deque_block_size == 0 ? 0 : 1);
+        _Grow_blocks_front(_Newblocks);
+
+        const auto _Old_first = _Unchecked_begin();
+        const auto _New_first = _Old_first - _Count;
+        _UWhere               = _To_iter(_Insert_pos);
+
+        // Move existing elements into uninitialized storage
+        _New_first._Block->_First = _New_first._Current;
+        _New_first._Block->_Last  = _New_first._Current;
+        for (auto _Current = _New_first._Block; _Current != _UWhere._Block; ++Current) {
+            _IFirst = _Block_construct<_Deque_strat::_Move>(_Current, _STD move(_IFirst), _ILast);
+        }
+
+        // We need to handle the
+    }
+
+
+    _CONSTEXPR23_CONTAINER void _Erase_after(_Blockptr _Block, const pointer _New_last) noexcept {
+        // Destroy all elements beginning from _Current
+        _Alty& _Al       = _Getal();
+        auto& _My_data   = _Mypair._Myval2;
+        _Blockptr& _Last = _My_data._Last;
+
+        if (!_Block) { // Guard against operations on empty deques
+            return;
+        }
+
+        for (auto _Current = _Block + 1; _Current != _Last; ++_Current) {
+            _Destroy_range(_Current->_First, _Current->_Last, _Al);
+            _Current->_First = _Current->_Begin;
+            _Current->_Last  = _Current->_Begin;
+        }
+
+        _Destroy_range(_New_last, _Block->_Last, _Al);
+        if (_New_last == _Block->_First) { // We fully emptied the block
+            _Block->_First = _Block->_Begin;
+            _Block->_Last  = _Block->_Begin;
+            _Last          = _Block;
         } else {
-            const auto _Old_size   = size(); // We need to use the size as we are growing inside _Construct_blocks
-            const auto _Insert_pos = _To_position(_UWhere);
-            _Construct_blocks<_Deque_strat::_Copy>(_Unchecked_end()._Block, _STD move(_IFirst), _STD move(_ILast));
-
-            // TRANSITION Build specialized rotate
-            const auto _Result = _STD rotate(_To_iter(_Insert_pos), _To_iter(_Old_size), _Unchecked_end());
-            return iterator{_Result._Block, _Result._Current, _STD addressof(_My_data)};
+            _Block->_Last = _New_last;
+            _Last         = _Block + 1;
         }
     }
 
-    enum class _Modifier_strategy : uint8_t {
-        _At_front,
-        _Shift_to_front,
-        _Shift_to_back,
-        _At_back,
-    };
+    _CONSTEXPR23_CONTAINER void _Erase_until(_Blockptr _Block, const pointer _New_first) noexcept {
+        // Destroy all elements beginning from _Current
+        _Alty& _Al        = _Getal();
+        auto& _My_data    = _Mypair._Myval2;
+        _Blockptr& _First = _My_data._First;
 
-    _NODISCARD constexpr _Modifier_strategy _Choose_strategy(
-        const _Unchecked_iterator _Left, const _Unchecked_iterator _Right) noexcept {
-        const auto _UBegin = _Unchecked_begin();
-        const auto _UEnd   = _Unchecked_end();
-        if (_Right == _UEnd) {
-            return _Modifier_strategy::_At_back;
-        } else if (_Left == _UBegin) {
-            return _Modifier_strategy::_At_front;
-        } else if (_Left - _UBegin < _UEnd - _Right) {
-            return _Modifier_strategy::_Shift_to_back;
-        } else {
-            return _Modifier_strategy::_Shift_to_front;
+        if (!_Block) { // Guard against operations on empty deques
+            return;
         }
+
+        for (auto _Current = _First; _Current != _Block; ++_Current) {
+            _Destroy_range(_Current->_First, _Current->_Last, _Al);
+            _Current->_First = _Current->_Begin;
+            _Current->_Last  = _Current->_Begin;
+        }
+
+        _Destroy_range(_Block->_First, _New_first, _Al);
+        if (_New_first == _Block->_Last) { // We fully emptied the block
+            _Block->_First = _Block->_Begin;
+            _Block->_Last  = _Block->_Begin;
+            _First         = _Block + 1;
+        } else {
+            _Block->_First = _New_first;
+            _First         = _Block;
+        }
+    }
+
+    _CONSTEXPR23_CONTAINER iterator _Erase_shift_to_back(
+        _Unchecked_iterator _Left, _Unchecked_iterator _Right) noexcept(is_nothrow_move_assignable_v<_Ty>) {
+        // Clear the elements in [_Left, _Right)
+        _STL_INTERNAL_CHECK(_Left != _Right);
+        _STL_INTERNAL_CHECK(_Left != _Unchecked_begin());
+
+        auto& _My_data          = _Mypair._Myval2;
+        const auto _Left_start  = _Left._Current - _Left._Block->_Begin;
+        const auto _Right_start = _Right._Current - _Right._Block->_Begin;
+        if (_Left_start == _Right_start) { // We can simply move the elements from _Right to _Left and swap blocks
+            const auto _Partial_left_block = _Left._Block->_First != _Left._Block->_Begin;
+            if (_Partial_left_block) {
+                const auto _New_first = _Move_backward_unchecked(_Left._Block->_First, _Left._Current, _Right._Current);
+                _Erase_until(_Right._Block, _New_first);
+            } else {
+                _Move_unchecked(_Left._Block->_First, _Left._Current, _Right._Block->_First);
+                const auto _Mid = _STD rotate(_My_data._First, _Left._Block + 1, _Right._Block);
+                _Erase_until(_Mid, _Mid->_Last);
+            }
+            return iterator{_Right._Block, _Right._Current, _STD addressof(_My_data)};
+        }
+
+        // TRANSITION: implement two-step dance
+        const auto _New_first = _STD _Move_backward_unchecked(_Unchecked_begin(), _Left, _Right);
+        _Erase_until(_New_first._Block, _New_first._Current);
+        return iterator{_Right._Block, _Right._Current, _STD addressof(_My_data)};
+    }
+
+    _CONSTEXPR23_CONTAINER iterator _Erase_shift_to_front(
+        _Unchecked_iterator _Left, _Unchecked_iterator _Right) noexcept(is_nothrow_move_assignable_v<_Ty>) {
+        // Clear the elements in [_Left, _Right)
+        _STL_INTERNAL_CHECK(_Left != _Right);
+        _STL_INTERNAL_CHECK(_Right != _Unchecked_end());
+
+        auto& _My_data        = _Mypair._Myval2;
+        const auto _Left_off  = _Left._Current - _Left._Block->_Begin;
+        const auto _Right_off = _Right._Current - _Right._Block->_Begin;
+        if (_Left_off == _Right_off) { // Move the elements from _Right._Block to _Left._Block and rotate blocks
+            const auto _Partial_right_block = _Right._Block->_Last != _Right._Block->_Begin + _Deque_block_size;
+            if (_Partial_right_block) { // We need to check whether we can actually fill _Left up
+                const auto _New_last = _Move_unchecked(_Right._Current, _Right._Block->_Last, _Left._Current);
+                _Erase_after(_Left._Block, _New_last);
+            } else {
+                _Move_unchecked(_Right._Current, _Right._Block->_Last, _Left._Current);
+                const auto _Mid = _STD rotate(_Left._Block + 1, _Right._Block + 1, _My_data._Last);
+                _Erase_after(_Mid, _Mid->_First);
+            }
+            return iterator{_Left._Block, _Left._Current, _STD addressof(_My_data)};
+        }
+
+        // TRANSITION: implement two-step dance
+        const auto _New_first = _STD _Move_unchecked(_Right, _Unchecked_end(), _Left);
+        _Erase_after(_New_first._Block, _New_first._Current);
+        return iterator{_Left._Block, _Left._Current, _STD addressof(_My_data)};
     }
 
     _CONSTEXPR23_CONTAINER void _Buy_raw(const size_type _Newcapacity) {
@@ -1797,7 +1925,7 @@ private:
         return _Remaining_elements;
     }
 
-    _CONSTEXPR23_CONTAINER void _Grow_blocks_right(const size_type _New_blocks) {
+    _CONSTEXPR23_CONTAINER void _Grow_blocks_back(const size_type _New_blocks) {
         _Alty& _Al = _Getal();
         _Alblock _BlockAl(_Getal());
         auto& _My_data    = _Mypair._Myval2;
@@ -1865,7 +1993,7 @@ private:
         _End   = _New_end;
     }
 
-    _CONSTEXPR23_CONTAINER void _Grow_blocks_left(const size_type _New_blocks) {
+    _CONSTEXPR23_CONTAINER void _Grow_blocks_front(const size_type _New_blocks) {
         _Alty& _Al = _Getal();
         _Alblock _BlockAl(_Getal());
         auto& _My_data    = _Mypair._Myval2;
@@ -1931,116 +2059,6 @@ private:
         _First = _Mid + _Available_left_blocks;
         _Last  = _New_array + _Total_blocks;
         _End   = _New_array + _Total_blocks;
-    }
-
-    _CONSTEXPR23_CONTAINER void _Erase_after(_Blockptr _Block, const pointer _New_last) noexcept {
-        // Destroy all elements beginning from _Current
-        _Alty& _Al       = _Getal();
-        auto& _My_data   = _Mypair._Myval2;
-        _Blockptr& _Last = _My_data._Last;
-
-        if (!_Block) { // Guard against operations on empty deques
-            return;
-        }
-
-        for (auto _Current = _Block + 1; _Current != _Last; ++_Current) {
-            _Destroy_range(_Current->_First, _Current->_Last, _Al);
-            _Current->_First = _Current->_Begin;
-            _Current->_Last  = _Current->_Begin;
-        }
-
-        _Destroy_range(_New_last, _Block->_Last, _Al);
-        if (_New_last == _Block->_First) { // We fully emptied the block
-            _Block->_First = _Block->_Begin;
-            _Block->_Last  = _Block->_Begin;
-            _Last          = _Block;
-        } else {
-            _Block->_Last = _New_last;
-            _Last         = _Block + 1;
-        }
-    }
-
-    _CONSTEXPR23_CONTAINER void _Erase_until(_Blockptr _Block, const pointer _New_first) noexcept {
-        // Destroy all elements beginning from _Current
-        _Alty& _Al        = _Getal();
-        auto& _My_data    = _Mypair._Myval2;
-        _Blockptr& _First = _My_data._First;
-
-        if (!_Block) { // Guard against operations on empty deques
-            return;
-        }
-
-        for (auto _Current = _First; _Current != _Block; ++_Current) {
-            _Destroy_range(_Current->_First, _Current->_Last, _Al);
-            _Current->_First = _Current->_Begin;
-            _Current->_Last  = _Current->_Begin;
-        }
-
-        _Destroy_range(_Block->_First, _New_first, _Al);
-        if (_New_first == _Block->_Last) { // We fully emptied the block
-            _Block->_First = _Block->_Begin;
-            _Block->_Last  = _Block->_Begin;
-            _First         = _Block + 1;
-        } else {
-            _Block->_First = _New_first;
-            _First         = _Block;
-        }
-    }
-
-    _CONSTEXPR23_CONTAINER iterator _Erase_shift_to_back(
-        _Unchecked_iterator _Left, _Unchecked_iterator _Right) noexcept(is_nothrow_move_assignable_v<_Ty>) {
-        // Clear the elements in [_Left, _Right)
-        _STL_INTERNAL_CHECK(_Left != _Right);
-        _STL_INTERNAL_CHECK(_Left != _Unchecked_begin());
-
-        auto& _My_data          = _Mypair._Myval2;
-        const auto _Left_start  = _Left._Current - _Left._Block->_Begin;
-        const auto _Right_start = _Right._Current - _Right._Block->_Begin;
-        if (_Left_start == _Right_start) { // We can simply move the elements from _Right to _Left and swap blocks
-            const auto _Partial_left_block = _Left._Block->_First != _Left._Block->_Begin;
-            if (_Partial_left_block) {
-                const auto _New_first = _Move_backward_unchecked(_Left._Block->_First, _Left._Current, _Right._Current);
-                _Erase_until(_Right._Block, _New_first);
-            } else {
-                _Move_unchecked(_Left._Block->_First, _Left._Current, _Right._Block->_First);
-                const auto _Mid = _STD rotate(_My_data._First, _Left._Block + 1, _Right._Block);
-                _Erase_until(_Mid, _Mid->_Last);
-            }
-            return iterator{_Right._Block, _Right._Current, _STD addressof(_My_data)};
-        }
-
-        // TRANSITION: implement two-step dance
-        const auto _New_first = _STD _Move_backward_unchecked(_Unchecked_begin(), _Left, _Right);
-        _Erase_until(_New_first._Block, _New_first._Current);
-        return iterator{_Right._Block, _Right._Current, _STD addressof(_My_data)};
-    }
-
-    _CONSTEXPR23_CONTAINER iterator _Erase_shift_to_front(
-        _Unchecked_iterator _Left, _Unchecked_iterator _Right) noexcept(is_nothrow_move_assignable_v<_Ty>) {
-        // Clear the elements in [_Left, _Right)
-        _STL_INTERNAL_CHECK(_Left != _Right);
-        _STL_INTERNAL_CHECK(_Right != _Unchecked_end());
-
-        auto& _My_data        = _Mypair._Myval2;
-        const auto _Left_off  = _Left._Current - _Left._Block->_Begin;
-        const auto _Right_off = _Right._Current - _Right._Block->_Begin;
-        if (_Left_off == _Right_off) { // Move the elements from _Right._Block to _Left._Block and rotate blocks
-            const auto _Partial_right_block = _Right._Block->_Last != _Right._Block->_Begin + _Deque_block_size;
-            if (_Partial_right_block) { // We need to check whether we can actually fill _Left up
-                const auto _New_last = _Move_unchecked(_Right._Current, _Right._Block->_Last, _Left._Current);
-                _Erase_after(_Left._Block, _New_last);
-            } else {
-                _Move_unchecked(_Right._Current, _Right._Block->_Last, _Left._Current);
-                const auto _Mid = _STD rotate(_Left._Block + 1, _Right._Block + 1, _My_data._Last);
-                _Erase_after(_Mid, _Mid->_First);
-            }
-            return iterator{_Left._Block, _Left._Current, _STD addressof(_My_data)};
-        }
-
-        // TRANSITION: implement two-step dance
-        const auto _New_first = _STD _Move_unchecked(_Right, _Unchecked_end(), _Left);
-        _Erase_after(_New_first._Block, _New_first._Current);
-        return iterator{_Left._Block, _Left._Current, _STD addressof(_My_data)};
     }
 
     _CONSTEXPR23_CONTAINER void _Tidy() noexcept { // free all storage
