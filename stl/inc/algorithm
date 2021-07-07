@@ -912,6 +912,26 @@ _NODISCARD _CONSTEXPR20 bool is_permutation(_FwdIt1 _First1, _FwdIt1 _Last1, _Fw
 
 #ifdef __cpp_lib_concepts
 namespace ranges {
+    enum class _Trim_checked : unsigned int {
+        _Nothing_checked    = 0,
+        _Prefix_checked     = 1 << 0,
+        _Suffix_checked     = 1 << 1,
+        _Reversed12_checked = 1 << 2,
+        _Reversed21_checked = 1 << 3,
+    };
+
+    _NODISCARD inline constexpr bool operator&(_Trim_checked _Left, _Trim_checked _Right) noexcept {
+        return static_cast<unsigned int>(_Left) & static_cast<unsigned int>(_Right);
+    }
+
+    _NODISCARD inline constexpr _Trim_checked& operator&=(_Trim_checked& _Left, _Trim_checked _Right) noexcept {
+        return _Left = static_cast<_Trim_checked>(static_cast<unsigned int>(_Left) & static_cast<unsigned int>(_Right));
+    }
+
+    _NODISCARD inline constexpr _Trim_checked& operator|=(_Trim_checked& _Left, _Trim_checked _Right) noexcept {
+        return _Left = static_cast<_Trim_checked>(static_cast<unsigned int>(_Left) | static_cast<unsigned int>(_Right));
+    }
+
     // clang-format off
     template <class _It, class _Se>
     concept _Bidi_common = is_same_v<_It, _Se> && bidirectional_iterator<_It>;
@@ -981,42 +1001,100 @@ namespace ranges {
                 indirect_equivalence_relation<_Pr, projected<_It1, _Pj1>, projected<_It2, _Pj2>>);
             _STL_INTERNAL_CHECK(_RANGES distance(_First1, _Last1) == _Count);
             _STL_INTERNAL_CHECK(_RANGES distance(_First2, _Last2) == _Count);
+            if (_Count == 0) { // everything matched
+                return true;
+            }
 
-            for (;; ++_First1, (void) ++_First2, --_Count) { // trim matching prefixes
+            _It1 _Final1;
+            if constexpr (bidirectional_iterator<_It1>) {
+                _Final1 = _Find_last_iterator(_First1, _Last1, _Count);
+            }
+
+            _It2 _Final2;
+            if constexpr (bidirectional_iterator<_It2>) {
+                _Final2 = _Find_last_iterator(_First2, _Last2, _Count);
+            }
+
+            _Trim_checked _Checked = _Trim_checked::_Nothing_checked;
+            for (;; --_Count) { // trim
                 if (_Count == 0) { // everything matched
                     return true;
                 }
 
-                if (!_STD invoke(_Pred, _STD invoke(_Proj1, *_First1), _STD invoke(_Proj2, *_First2))) { // mismatch
-                    break;
+                // Matching prefix
+                if (!(_Checked & _Trim_checked::_Prefix_checked)
+                    && _STD invoke(_Pred, _STD invoke(_Proj1, *_First1), _STD invoke(_Proj2, *_First2))) {
+                    ++_First1;
+                    ++_First2;
+                    _Checked &= _Trim_checked::_Suffix_checked;
+                    continue;
+                } else {
+                    _Checked |= _Trim_checked::_Prefix_checked;
                 }
+
+                // Matching reversed
+                if constexpr (bidirectional_iterator<_It2>) {
+                    --_Final2;
+                    if (!(_Checked & _Trim_checked::_Reversed12_checked)
+                        && _STD invoke(_Pred, _STD invoke(_Proj1, *_First1), _STD invoke(_Proj2, *_Final2))) {
+                        ++_First1;
+                        _Checked &= _Trim_checked::_Reversed21_checked;
+                        continue;
+                    } else {
+                        _Checked |= _Trim_checked::_Reversed12_checked;
+                    }
+                }
+
+                // Matching reversed
+                if constexpr (bidirectional_iterator<_It1>) {
+                    --_Final1;
+                    if (!(_Checked & _Trim_checked::_Reversed21_checked)
+                        && _STD invoke(_Pred, _STD invoke(_Proj1, *_Final1), _STD invoke(_Proj2, *_First2))) {
+                        ++_First2;
+                        if constexpr (bidirectional_iterator<_It2>) {
+                            ++_Final2;
+                        }
+                        _Checked &= _Trim_checked::_Reversed12_checked;
+                        continue;
+                    } else {
+                        _Checked |= _Trim_checked::_Reversed21_checked;
+                    }
+                }
+
+                // Matching suffix
+                if constexpr (bidirectional_iterator<_It1> && bidirectional_iterator<_It2>) {
+                    if (!(_Checked & _Trim_checked::_Suffix_checked)
+                        && _STD invoke(_Pred, _STD invoke(_Proj1, *_Final1), _STD invoke(_Proj2, *_Final2))) {
+                        _Checked &= _Trim_checked::_Prefix_checked;
+                        continue;
+                    } else {
+                        _Checked |= _Trim_checked::_Suffix_checked;
+                    }
+                }
+
+                if constexpr (bidirectional_iterator<_It1>) {
+                    ++_Final1;
+                }
+
+                if constexpr (bidirectional_iterator<_It2>) {
+                    ++_Final2;
+                }
+
+                break;
             }
 
             if (_Count == 1) { // single non-matching elements remain; not a permutation
                 return false;
             }
-            // If we get here, _Count > 1 and initial elements do not match.
 
-            if constexpr (bidirectional_iterator<_It1> && bidirectional_iterator<_It2>) {
-                // determine final iterator values
-                auto _Final1 = _Find_last_iterator(_First1, _Last1, _Count);
-                auto _Final2 = _Find_last_iterator(_First2, _Last2, _Count);
-
-                for (;;) { // trim matching suffixes
-                    --_Final1;
-                    --_Final2;
-                    if (!_STD invoke(_Pred, _STD invoke(_Proj1, *_Final1), _STD invoke(_Proj2, *_Final2))) { // mismatch
-                        ++_Final1;
-                        ++_Final2;
-                        break;
-                    }
-
-                    if (--_Count == 1) {
-                        return false; // initial elements still do not match
-                    }
-                }
-                // If we get here, _Count > 1, initial elements do not match, and final elements do not match.
-
+            // If we get here, _Count > 1, initial elements do not match, and final elements do not match.
+            if constexpr (bidirectional_iterator<_It1>) {
+                return _Match_counts(_STD move(_First1), _STD move(_Final1), _STD move(_First2), _STD move(_Last2),
+                    _Pred, _Proj1, _Proj2);
+            } else if constexpr (bidirectional_iterator<_It2>) {
+                return _Match_counts(_STD move(_First1), _STD move(_Last1), _STD move(_First2), _STD move(_Final2),
+                    _Pred, _Proj1, _Proj2);
+            } else if constexpr (bidirectional_iterator<_It1> && bidirectional_iterator<_It2>) {
                 return _Match_counts(_STD move(_First1), _STD move(_Final1), _STD move(_First2), _STD move(_Final2),
                     _Pred, _Proj1, _Proj2);
             } else {
@@ -1049,11 +1127,13 @@ namespace ranges {
             // If we get here, initial elements do not match.
 
             // determine final iterator values and validate lengths
-            auto _Final1 = _First1;
-            auto _Final2 = _First2;
+            auto _Final1                   = _First1;
+            auto _Final2                   = _First2;
+            iter_difference_t<_It1> _Count = 0;
             for (;;) {
                 ++_Final1;
                 ++_Final2;
+                ++_Count;
                 if (_Final1 == _Last1) {
                     if (_Final2 == _Last2) {
                         break; // equal lengths
@@ -1064,27 +1144,10 @@ namespace ranges {
                     return false; // ditto different lengths
                 }
             }
-            // If we get here, initial elements do not match and ranges have equal lengths.
 
-            if constexpr (bidirectional_iterator<_It1> && bidirectional_iterator<_It2>) {
-                for (;;) { // trim matching suffixes
-                    if (--_Final1 == _First1) {
-                        return false; // initial elements still do not match
-                    }
-                    --_Final2; // since ranges have equal lengths, _Final2 cannot equal _First2
-
-                    if (!_STD invoke(_Pred, _STD invoke(_Proj1, *_Final1), _STD invoke(_Proj2, *_Final2))) { // mismatch
-                        ++_Final1;
-                        ++_Final2;
-                        break;
-                    }
-                }
-                // If we get here, initial elements do not match, final elements do not match, and ranges have length
-                // at least 2.
-            }
-
-            return _Match_counts(
-                _STD move(_First1), _STD move(_Final1), _STD move(_First2), _STD move(_Final2), _Pred, _Proj1, _Proj2);
+            // We counted now reuse the trimming from the sized algorithm
+            return _Is_permutation_sized(_STD move(_First1), _STD move(_Final1), _STD move(_First2), _STD move(_Final2),
+                _Count, _Pred, _Proj1, _Proj2);
         }
 
         template <class _It1, class _Se1, class _It2, class _Se2, class _Pr, class _Pj1, class _Pj2>
